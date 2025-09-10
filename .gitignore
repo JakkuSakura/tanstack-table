@@ -55,3 +55,11 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 .angular
+.idea
+obj/
+.claude
+*.sln.DotSettings.user
+
+# C Sharp Local project files
+bin/
+

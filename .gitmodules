@@ -1,0 +1,3 @@
+[submodule "csharp/external/SolidAvalonia"]
+	path = csharp/external/SolidAvalonia
+	url = https://github.com/JakkuSakura/SolidAvalonia
