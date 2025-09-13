@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace TanStack.Table.Core;
 
@@ -14,6 +15,49 @@ public class Column<TData> : IColumn<TData>
     public IReadOnlyList<IColumn<TData>> Columns => _columns.Cast<IColumn<TData>>().ToList().AsReadOnly();
     public IReadOnlyList<IColumn<TData>> FlatColumns => GetFlatColumns();
     public IReadOnlyList<IColumn<TData>> LeafColumns => GetLeafColumns();
+
+    // 便于调试的访问器属性 - 通过反射读取正确的值
+    public string? AccessorKey 
+    { 
+        get 
+        {
+            // 如果是泛型 ColumnDef<TData,TValue>，尝试获取其 AccessorKey
+            var columnDefType = ColumnDef.GetType();
+            if (columnDefType.IsGenericType && 
+                columnDefType.GetGenericTypeDefinition() == typeof(ColumnDef<,>))
+            {
+                // 使用 DeclaredOnly 只获取派生类中声明的属性，避免歧义
+                var accessorKeyProp = columnDefType.GetProperty("AccessorKey",
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                if (accessorKeyProp != null)
+                {
+                    return accessorKeyProp.GetValue(ColumnDef) as string;
+                }
+            }
+            return ColumnDef.AccessorKey;
+        }
+    }
+    
+    public bool HasAccessorFn 
+    { 
+        get 
+        {
+            // 如果是泛型 ColumnDef<TData,TValue>，尝试获取其 AccessorFn
+            var columnDefType = ColumnDef.GetType();
+            if (columnDefType.IsGenericType && 
+                columnDefType.GetGenericTypeDefinition() == typeof(ColumnDef<,>))
+            {
+                // 使用 DeclaredOnly 只获取派生类中声明的属性，避免歧义
+                var accessorFnProp = columnDefType.GetProperty("AccessorFn",
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                if (accessorFnProp != null)
+                {
+                    return accessorFnProp.GetValue(ColumnDef) != null;
+                }
+            }
+            return ColumnDef.AccessorFn != null;
+        }
+    }
 
     public bool IsVisible => GetVisibility();
     public bool CanSort => GetCanSort();

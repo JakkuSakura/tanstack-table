@@ -5,6 +5,7 @@ using Avalonia.Markup.Declarative;
 using SolidAvalonia;
 using TanStack.Table.Core;
 using static SolidAvalonia.Solid;
+using Avalonia.LogicalTree;
 
 namespace TanStack.Table.SolidAvalonia;
 
@@ -21,10 +22,13 @@ public class SolidTable<TData> : Component
     {
         _options = options;
         _externalTable = externalTable;
+        OnCreatedCore(); // 推送 reactive owner
+        Initialize(); // 触发 Build()
     }
 
     protected override object Build()
     {
+        Console.WriteLine("SolidTable.Build invoked");
         // Initialize table and signals here in the proper component lifecycle
         if (_table == null)
         {
@@ -137,7 +141,7 @@ public class SolidTable<TData> : Component
     {
         if (!table.FooterGroups.Any())
             return new Panel(); // Empty footer
-            
+
         return new StackPanel()
             .Orientation(Orientation.Vertical)
             .Children(
@@ -180,10 +184,19 @@ public class SolidTable<TData> : Component
         try
         {
             var cell = row.GetCell(column.Id);
-            return cell.Value?.ToString() ?? "";
+            if (cell == null)
+            {
+                Console.WriteLine($"DEBUG cell null row={row.Id} colId={column.Id}");
+                return "";
+            }
+
+            var v = cell.Value;
+            Console.WriteLine($"DEBUG cell row={row.Id} col={column.Id} value={(v==null?"<null>":v)}");
+            return v?.ToString() ?? "";
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"DEBUG GetCellContent exception row={row.Id} colId={column.Id}: {ex}");
             return "";
         }
     }
@@ -203,9 +216,9 @@ public class SolidTable<TData> : Component
 
     public void SetGlobalFilter(object? value)
     {
-        Table.SetState(state => state with 
-        { 
-            GlobalFilter = value != null ? new GlobalFilterState(value) : null 
+        Table.SetState(state => state with
+        {
+            GlobalFilter = value != null ? new GlobalFilterState(value) : null
         });
     }
 
@@ -218,8 +231,8 @@ public class SolidTable<TData> : Component
     public void SetPageIndex(int pageIndex)
     {
         var currentPagination = Table.State.Pagination ?? new PaginationState();
-        Table.SetState(state => state with 
-        { 
+        Table.SetState(state => state with
+        {
             Pagination = currentPagination with { PageIndex = pageIndex }
         });
     }
@@ -227,8 +240,8 @@ public class SolidTable<TData> : Component
     public void SetPageSize(int pageSize)
     {
         var currentPagination = Table.State.Pagination ?? new PaginationState();
-        Table.SetState(state => state with 
-        { 
+        Table.SetState(state => state with
+        {
             Pagination = currentPagination with { PageSize = pageSize }
         });
     }

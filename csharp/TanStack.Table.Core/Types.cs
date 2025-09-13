@@ -121,6 +121,8 @@ public record PaginationState
 public abstract record ColumnDef<TData>
 {
     public string? Id { get; init; }
+    public string? AccessorKey { get; init; }
+    public object? AccessorFn { get; init; }
     public object? Header { get; init; }
     public object? Footer { get; init; }
     public bool? EnableSorting { get; init; }
@@ -136,8 +138,8 @@ public abstract record ColumnDef<TData>
 
 public record ColumnDef<TData, TValue> : ColumnDef<TData>
 {
-    public AccessorFn<TData, TValue>? AccessorFn { get; init; }
-    public string? AccessorKey { get; init; }
+    public new AccessorFn<TData, TValue>? AccessorFn { get; init; }
+    public new string? AccessorKey { get; init; }
     public object? Cell { get; init; }
     public Func<TValue, TValue, int>? SortingFn { get; init; }
     public Func<Row<TData>, string, TValue, bool>? FilterFn { get; init; }
