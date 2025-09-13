@@ -73,6 +73,17 @@ public class MainWindow : Window
 
         table = new Table<Person>(options);
 
+        Console.WriteLine($"DEBUG Rows after creation: {table.RowModel.Rows.Count}");
+        Console.WriteLine($"DEBUG VisibleLeafColumns: {table.VisibleLeafColumns.Count}");
+        foreach (var c in table.VisibleLeafColumns)
+        {
+            Console.WriteLine($"DEBUG Column {c.Id} Size={c.Size}");
+        }
+        // foreach (var c in table.VisibleLeafColumns)
+        // {
+        //     Console.WriteLine($"DEBUG column {c.Id} accessorNull={(c.ColumnDef.AccessorFn==null)} key={c.ColumnDef.AccessorKey}");
+        // }
+
         // Create SolidTable for the UI using the TanStack Table Core
         var solidTable = new SolidTable<Person>(options, table);
 
@@ -96,7 +107,7 @@ public class MainWindow : Window
                         GlobalFilter = new GlobalFilterState(tb.Text ?? ""),
                         Pagination = solidTable.Table.State.Pagination
                     });
-                    
+
                     SafeUpdateInfoText(solidTable);
                 }
                 catch (InvalidOperationException)
