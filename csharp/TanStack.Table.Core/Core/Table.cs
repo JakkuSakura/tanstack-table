@@ -61,7 +61,33 @@ public class Table<TData> : ITable<TData>
     {
         foreach (var columnDef in columnDefs)
         {
-            var column = new Column<TData>(this, columnDef, parent, depth);
+            Column<TData> column;
+            
+            // 检测是否为泛型 ColumnDef<TData, TValue>
+            var columnDefType = columnDef.GetType();
+            if (columnDefType.IsGenericType &&
+                columnDefType.GetGenericTypeDefinition() == typeof(ColumnDef<,>))
+            {
+                // 通过反射创建对应的 Column<TData, TValue>
+                var valueType = columnDefType.GetGenericArguments()[1]; // TValue
+                var columnType = typeof(Column<,>).MakeGenericType(typeof(TData), valueType);
+                
+                try
+                {
+                    column = (Column<TData>)Activator.CreateInstance(columnType, this, columnDef, parent, depth)!;
+                }
+                catch
+                {
+                    // 如果泛型创建失败，回退到基础 Column<TData>
+                    column = new Column<TData>(this, columnDef, parent, depth);
+                }
+            }
+            else
+            {
+                // 非泛型或 GroupColumnDef<TData> 等，使用基础 Column<TData>
+                column = new Column<TData>(this, columnDef, parent, depth);
+            }
+            
             allColumns.Add(column);
             
             if (columnDef is GroupColumnDef<TData> groupDef)

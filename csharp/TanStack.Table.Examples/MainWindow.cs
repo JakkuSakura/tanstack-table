@@ -45,15 +45,22 @@ public class MainWindow : Window
             new("Henry", "Taylor", 31, "henry.taylor@example.com", "Engineering")
         };
 
-        // Define columns
+        // Define columns - 明确指定参数名以避免重载歧义
         var columns = new List<ColumnDef<Person>>
         {
-            ColumnHelper.Accessor<Person, string>(p => p.FirstName, "firstName", "First Name"),
-            ColumnHelper.Accessor<Person, string>(p => p.LastName, "lastName", "Last Name"),
-            ColumnHelper.Accessor<Person, int>(p => p.Age, "age", "Age"),
-            ColumnHelper.Accessor<Person, string>(p => p.Email, "email", "Email"),
-            ColumnHelper.Accessor<Person, string>(p => p.Department, "department", "Department")
+            ColumnHelper.Accessor<Person, string>(accessorFn: p => p.FirstName, id: "firstName", header: "First Name"),
+            ColumnHelper.Accessor<Person, string>(accessorFn: p => p.LastName, id: "lastName", header: "Last Name"),
+            ColumnHelper.Accessor<Person, int>(accessorFn: p => p.Age, id: "age", header: "Age"),
+            ColumnHelper.Accessor<Person, string>(accessorFn: p => p.Email, id: "email", header: "Email"),
+            ColumnHelper.Accessor<Person, string>(accessorFn: p => p.Department, id: "department", header: "Department")
         };
+
+        // 调试：检查 ColumnDef 创建结果
+        Console.WriteLine("DEBUG ColumnDef creation:");
+        foreach (var colDef in columns)
+        {
+            Console.WriteLine($"  ColumnDef id={colDef.Id} accessorKey={colDef.AccessorKey} hasAccessorFn={colDef.AccessorFn != null} type={colDef.GetType().Name}");
+        }
 
         // Create table using TanStack Table Core - THIS IS THE ACTUAL TANSTACK TABLE!
         // This demonstrates that we're using TanStack Table for data management
@@ -79,10 +86,10 @@ public class MainWindow : Window
         {
             Console.WriteLine($"DEBUG Column {c.Id} Size={c.Size}");
         }
-        // foreach (var c in table.VisibleLeafColumns)
-        // {
-        //     Console.WriteLine($"DEBUG column {c.Id} accessorNull={(c.ColumnDef.AccessorFn==null)} key={c.ColumnDef.AccessorKey}");
-        // }
+        foreach (var c in table.VisibleLeafColumns)
+        {
+            Console.WriteLine($"DEBUG column {c.Id} accessorKey={c.AccessorKey} hasAccessorFn={c.HasAccessorFn}");
+        }
 
         // Create SolidTable for the UI using the TanStack Table Core
         var solidTable = new SolidTable<Person>(options, table);
