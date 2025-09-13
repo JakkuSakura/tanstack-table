@@ -19,10 +19,10 @@ public class Cell<TData> : ICell<TData>
         Row = row;
         Column = column;
         Id = $"{row.Id}_{column.Id}";
-        
+
         Value = GetCellValue();
         RenderValue = Value; // TODO: Implement render value logic
-        
+
         IsGrouped = row.IsGrouped && column.IsGrouped;
         IsAggregated = false; // TODO: Implement aggregation logic
         IsPlaceholder = false; // TODO: Implement placeholder logic
@@ -30,26 +30,42 @@ public class Cell<TData> : ICell<TData>
 
     private object? GetCellValue()
     {
-        // Try to get value using typed column accessor
-        if (Column.ColumnDef is ColumnDef<TData, object> typedColumnDef)
+        var def = Column.ColumnDef;
+        var defType = def.GetType();
+
+        // 1. AccessorFn (任意 TValue) —— 形如 Func<TData, TValue>
+        var accessorFnProp = defType.GetProperty("AccessorFn");
+        if (accessorFnProp != null)
         {
-            var accessorFn = typedColumnDef.AccessorFn;
-            if (accessorFn != null)
-                return accessorFn(Row.Original);
+            if (accessorFnProp.GetValue(def) is Delegate del)
+            {
+                try
+                {
+                    var v = del.DynamicInvoke(Row.Original);
+                    if (v != null) return v;
+                }
+                catch { /* 吞掉单元格级别异常，继续尝试下一策略 */ }
+            }
         }
-        
-        // Fallback to reflection-based access
-        if (Column.ColumnDef is ColumnDef<TData, object> columnDef && !string.IsNullOrEmpty(columnDef.AccessorKey))
+
+        // 2. AccessorKey（如果列是通过 key 定义的）
+        var accessorKeyProp = defType.GetProperty("AccessorKey");
+        if (accessorKeyProp != null)
         {
-            var property = typeof(TData).GetProperty(columnDef.AccessorKey);
-            if (property != null)
-                return property.GetValue(Row.Original);
-                
-            var field = typeof(TData).GetField(columnDef.AccessorKey);
-            if (field != null)
-                return field.GetValue(Row.Original);
+            var key = accessorKeyProp.GetValue(def) as string;
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                var dataType = typeof(TData);
+                var prop = dataType.GetProperty(key);
+                if (prop != null)
+                    return prop.GetValue(Row.Original);
+
+                var field = dataType.GetField(key);
+                if (field != null)
+                    return field.GetValue(Row.Original);
+            }
         }
-        
+
         return null;
     }
 }
@@ -65,7 +81,24 @@ public class Cell<TData, TValue> : Cell<TData>, ICell<TData, TValue>
     public Cell(Row<TData> row, Column<TData, TValue> column) : base(row, column)
     {
         Column = column;
-        Value = column.GetValue(row);
-        RenderValue = Value; // TODO: Implement render value logic
+        // 对于泛型列可直接使用列的 AccessorFn 以避免二次反射
+        if (column.AccessorFn != null)
+        {
+            try
+            {
+                Value = column.AccessorFn(row.Original);
+            }
+            catch
+            {
+                Value = default!;
+            }
+        }
+        else
+        {
+            // 退回基类已算好的 object? Value
+            var baseVal = base.Value;
+            Value = baseVal is TValue tv ? tv : default!;
+        }
+        RenderValue = Value;
     }
 }
