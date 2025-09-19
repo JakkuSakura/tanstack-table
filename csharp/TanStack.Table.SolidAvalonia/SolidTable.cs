@@ -69,9 +69,12 @@ public class SolidTable<TData> : Component
             }
         }
 
+        var table = Table; // Access the reactive signal once to get the initial table
+        var header = CreateHeader(table); // Create header once, outside reactive context
+        
         return Reactive(() =>
         {
-            var table = Table; // Access the reactive signal
+            var currentTable = Table; // Access the reactive signal for body updates
 
             var mainBorder = new Border()
                 .BorderThickness(1)
@@ -79,12 +82,12 @@ public class SolidTable<TData> : Component
                 .Child(
                     new StackPanel()
                         .Children(
-                            // Header
-                            CreateHeader(table),
-                            // Body
-                            CreateBody(table),
-                            // Footer (optional)
-                            CreateFooter(table)
+                            // Header (stable, created once)
+                            header,
+                            // Body (reactive, updates with table changes)
+                            CreateBody(currentTable),
+                            // Footer (reactive)
+                            CreateFooter(currentTable)
                         )
                 );
 
@@ -118,6 +121,12 @@ public class SolidTable<TData> : Component
                 {
                     try
                     {
+                        // Don't handle keyboard events if a TextBox has focus (let text input work)
+                        if (e.Source is TextBox)
+                        {
+                            return; // Let TextBox handle its own input
+                        }
+
                         var direction = e.Key switch
                         {
                             Avalonia.Input.Key.Up => SaGrid<TData>.CellNavigationDirection.Up,
@@ -159,10 +168,14 @@ public class SolidTable<TData> : Component
                     }
                 };
 
-                // Focus the border when clicked to enable keyboard navigation
+                // Focus the border when clicked to enable keyboard navigation, but not if clicking on a TextBox
                 mainBorder.PointerPressed += (sender, e) =>
                 {
-                    mainBorder.Focus();
+                    // Don't steal focus if the user clicked on a TextBox
+                    if (e.Source is not TextBox)
+                    {
+                        mainBorder.Focus();
+                    }
                 };
             }
 
@@ -200,7 +213,13 @@ public class SolidTable<TData> : Component
         // Add filter row if column filtering is enabled
         if (table.Options.EnableColumnFilters)
         {
-            headerControls.Add(CreateFilterRow(table));
+            var filterRow = CreateFilterRow(table);
+            Console.WriteLine($"Adding filter row to header - Total header controls: {headerControls.Count + 1}");
+            headerControls.Add(filterRow);
+        }
+        else
+        {
+            Console.WriteLine("Column filtering is disabled - no filter row will be added");
         }
         
         return new StackPanel()
@@ -210,39 +229,80 @@ public class SolidTable<TData> : Component
 
     private Control CreateFilterRow(Table<TData> table)
     {
+        Console.WriteLine($"Creating filter row with {table.VisibleLeafColumns.Count} columns");
+        
+        var filterControls = table.VisibleLeafColumns.Select(column =>
+        {
+            Console.WriteLine($"Creating filter for column: {column.Id}");
+            var textBox = CreateFilterTextBox(table, column);
+            return new Border()
+                .BorderThickness(0, 0, 1, 1)
+                .BorderBrush(Brushes.LightGray)
+                .Background(Brushes.White)
+                .Width(column.Size)
+                .Height(35)
+                .Padding(new Thickness(2))
+                .Child(textBox);
+        }).ToArray();
+
         return new StackPanel()
             .Orientation(Orientation.Horizontal)
-            .Children(
-                table.VisibleLeafColumns.Select(column =>
-                    new Border()
-                        .BorderThickness(0, 0, 1, 1)
-                        .BorderBrush(Brushes.LightGray)
-                        .Background(Brushes.White)
-                        .Width(column.Size)
-                        .Height(35)
-                        .Child(
-                            CreateFilterTextBox(table, column)
-                        )
-                ).ToArray()
-            );
+            .Children(filterControls);
     }
 
     private Control CreateFilterTextBox(Table<TData> table, Column<TData> column)
     {
-        var textBox = new TextBox()
+        Console.WriteLine($"Creating TextBox for column {column.Id}");
+        
+        var textBox = new TextBox
         {
             Watermark = $"Filter {column.Id}...",
-            Margin = new Thickness(4),
-            FontSize = 12,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0)
+            Width = double.NaN, // Auto width
+            Height = double.NaN, // Auto height
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
+        
+        Console.WriteLine($"TextBox created for {column.Id} - Focusable: {textBox.Focusable}, IsEnabled: {textBox.IsEnabled}");
+
+        // Add multiple event handlers to debug what's happening
+        textBox.GotFocus += (sender, args) =>
+        {
+            Console.WriteLine($"TextBox for column {column.Id} got focus");
+        };
+
+        textBox.LostFocus += (sender, args) =>
+        {
+            Console.WriteLine($"TextBox for column {column.Id} lost focus");
+        };
+
+        textBox.PointerPressed += (sender, args) =>
+        {
+            Console.WriteLine($"TextBox for column {column.Id} pointer pressed");
+            textBox.Focus();
+        };
+
+        textBox.PointerEntered += (sender, args) =>
+        {
+            Console.WriteLine($"TextBox for column {column.Id} pointer entered");
+        };
+
+        textBox.KeyDown += (sender, args) =>
+        {
+            Console.WriteLine($"TextBox for column {column.Id} key down: {args.Key}");
+        };
+
+        textBox.TextChanging += (sender, args) =>
+        {
+            Console.WriteLine($"TextBox for column {column.Id} text changing");
         };
 
         textBox.TextChanged += (sender, args) =>
         {
-            if (table is SaGrid<TData> saGrid)
+            if (table is SaGrid<TData> saGrid && sender is TextBox tb)
             {
-                var filterValue = string.IsNullOrWhiteSpace(textBox.Text) ? (object?)null : textBox.Text;
+                var filterValue = string.IsNullOrWhiteSpace(tb.Text) ? (object?)null : tb.Text;
+                Console.WriteLine($"Filter changed for column {column.Id}: '{tb.Text}' -> {(filterValue == null ? "null" : filterValue)}");
                 saGrid.SetColumnFilter(column.Id, filterValue);
             }
         };
