@@ -25,6 +25,7 @@ public record TableOptions<TData>
     public bool EnableGrouping { get; init; } = false;
     public bool EnableExpanding { get; init; } = false;
     public bool EnableRowSelection { get; init; } = false;
+    public bool EnableCellSelection { get; init; } = false;
     public bool EnableColumnResizing { get; init; } = false;
     public bool EnableColumnReordering { get; init; } = false;
     public bool EnableColumnPinning { get; init; } = false;
@@ -44,6 +45,7 @@ public record TableState<TData>
     public ColumnOrderState? ColumnOrder { get; init; }
     public ColumnPinningState? ColumnPinning { get; init; }
     public ColumnSizingState? ColumnSizing { get; init; }
+    public CellSelectionState? CellSelection { get; init; }
     public ColumnVisibilityState? ColumnVisibility { get; init; }
     public PaginationState? Pagination { get; init; }
 }
@@ -106,6 +108,46 @@ public record ColumnPinningState
 {
     public IReadOnlyList<string>? Left { get; init; }
     public IReadOnlyList<string>? Right { get; init; }
+}
+
+// Cell selection types
+public record CellPosition(int RowIndex, string ColumnId)
+{
+    public override string ToString() => $"{RowIndex}:{ColumnId}";
+}
+
+public record CellRange(CellPosition Start, CellPosition End);
+
+public record CellSelectionState(HashSet<CellPosition> SelectedCells = null!, CellPosition? ActiveCell = null, CellRange? SelectionRange = null)
+{
+    public HashSet<CellPosition> SelectedCells { get; init; } = SelectedCells ?? new HashSet<CellPosition>();
+    public CellPosition? ActiveCell { get; init; } = ActiveCell;
+    public CellRange? SelectionRange { get; init; } = SelectionRange;
+
+    public bool IsCellSelected(int rowIndex, string columnId)
+    {
+        return SelectedCells.Contains(new CellPosition(rowIndex, columnId));
+    }
+
+    public bool IsCellInRange(int rowIndex, string columnId)
+    {
+        if (SelectionRange == null) return false;
+        
+        var startRow = Math.Min(SelectionRange.Start.RowIndex, SelectionRange.End.RowIndex);
+        var endRow = Math.Max(SelectionRange.Start.RowIndex, SelectionRange.End.RowIndex);
+        
+        // For simplicity, assume column ordering by string comparison
+        // In a real implementation, this would use column display order
+        var startCol = string.Compare(SelectionRange.Start.ColumnId, SelectionRange.End.ColumnId) <= 0 
+            ? SelectionRange.Start.ColumnId 
+            : SelectionRange.End.ColumnId;
+        var endCol = string.Compare(SelectionRange.Start.ColumnId, SelectionRange.End.ColumnId) <= 0 
+            ? SelectionRange.End.ColumnId 
+            : SelectionRange.Start.ColumnId;
+        
+        return rowIndex >= startRow && rowIndex <= endRow && 
+               string.Compare(columnId, startCol) >= 0 && string.Compare(columnId, endCol) <= 0;
+    }
 }
 
 public record ColumnSizingState(Dictionary<string, double> Items = null!)

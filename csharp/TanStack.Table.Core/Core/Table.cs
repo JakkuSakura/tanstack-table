@@ -391,6 +391,7 @@ public class Table<TData> : ITable<TData>
         }
     }
 
+
     public int GetPageCount()
     {
         var pagination = _state.Pagination;

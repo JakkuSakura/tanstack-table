@@ -6,6 +6,9 @@ namespace TanStack.Table.Core;
 public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 {
     private string? _quickFilter;
+    
+    // Callback for UI updates
+    private Action? _onUIUpdate;
 
     public SaGrid(TableOptions<TData> options) : base(options)
     {
@@ -380,6 +383,214 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     {
         return _themeProperties.GetValueOrDefault(key);
     }
+
+    // Additional filtering methods needed by the example
+    public void ClearColumnFilters()
+    {
+        SetState(state => state with { ColumnFilters = null });
+    }
+
+    public void SetColumnFilter(string columnId, object value)
+    {
+        var currentFilters = State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
+        var newFilters = currentFilters.Where(f => f.Id != columnId).ToList();
+        newFilters.Add(new ColumnFilter(columnId, value));
+        
+        SetState(state => state with 
+        { 
+            ColumnFilters = new ColumnFiltersState(newFilters)
+        });
+    }
+
+    // Cell selection functionality
+    // Method for UI to set update callback
+    public void SetUIUpdateCallback(Action? callback)
+    {
+        _onUIUpdate = callback;
+    }
+
+    public void SelectCell(int rowIndex, string columnId, bool addToSelection = false)
+    {
+        if (!Options.EnableCellSelection) return;
+
+        var cellPosition = new CellPosition(rowIndex, columnId);
+        var currentSelection = State.CellSelection ?? new CellSelectionState();
+        
+        Console.WriteLine($"DEBUG SelectCell: Row {rowIndex}, Col {columnId}, AddToSelection: {addToSelection}, CurrentSelected: {currentSelection.SelectedCells.Count}");
+        
+        HashSet<CellPosition> newSelectedCells;
+        
+        if (addToSelection)
+        {
+            newSelectedCells = new HashSet<CellPosition>(currentSelection.SelectedCells) { cellPosition };
+        }
+        else
+        {
+            newSelectedCells = new HashSet<CellPosition> { cellPosition };
+        }
+
+        Console.WriteLine($"DEBUG SelectCell: NewSelectedCount: {newSelectedCells.Count}, Setting active to Row {rowIndex}, Col {columnId}");
+
+        SetState(state => state with 
+        { 
+            CellSelection = new CellSelectionState(newSelectedCells, cellPosition, null)
+        });
+
+        Console.WriteLine($"DEBUG SelectCell: After SetState, Selected count: {State.CellSelection?.SelectedCells.Count ?? 0}");
+
+        // Trigger UI update
+        _onUIUpdate?.Invoke();
+    }
+
+    public void SelectCellRange(int startRowIndex, string startColumnId, int endRowIndex, string endColumnId)
+    {
+        if (!Options.EnableCellSelection) return;
+
+        var startPos = new CellPosition(startRowIndex, startColumnId);
+        var endPos = new CellPosition(endRowIndex, endColumnId);
+        var range = new CellRange(startPos, endPos);
+
+        // Calculate all cells in the range
+        var selectedCells = new HashSet<CellPosition>();
+        var startRow = Math.Min(startRowIndex, endRowIndex);
+        var endRow = Math.Max(startRowIndex, endRowIndex);
+        
+        // Get column indices for proper range selection
+        var visibleColumns = VisibleLeafColumns.ToList();
+        var startColIndex = visibleColumns.FindIndex(c => c.Id == startColumnId);
+        var endColIndex = visibleColumns.FindIndex(c => c.Id == endColumnId);
+        
+        if (startColIndex >= 0 && endColIndex >= 0)
+        {
+            var minColIndex = Math.Min(startColIndex, endColIndex);
+            var maxColIndex = Math.Max(startColIndex, endColIndex);
+            
+            for (int rowIndex = startRow; rowIndex <= endRow; rowIndex++)
+            {
+                for (int colIndex = minColIndex; colIndex <= maxColIndex; colIndex++)
+                {
+                    selectedCells.Add(new CellPosition(rowIndex, visibleColumns[colIndex].Id));
+                }
+            }
+        }
+
+        SetState(state => state with 
+        { 
+            CellSelection = new CellSelectionState(selectedCells, startPos, range)
+        });
+
+        // Trigger UI update
+        _onUIUpdate?.Invoke();
+    }
+
+    public void ClearCellSelection()
+    {
+        SetState(state => state with 
+        { 
+            CellSelection = new CellSelectionState()
+        });
+
+        // Trigger UI update
+        _onUIUpdate?.Invoke();
+    }
+
+    public bool IsCellSelected(int rowIndex, string columnId)
+    {
+        var cellSelection = State.CellSelection;
+        return cellSelection?.IsCellSelected(rowIndex, columnId) == true;
+    }
+
+    public CellPosition? GetActiveCell()
+    {
+        return State.CellSelection?.ActiveCell;
+    }
+
+    public IReadOnlyCollection<CellPosition> GetSelectedCells()
+    {
+        return State.CellSelection?.SelectedCells ?? new HashSet<CellPosition>();
+    }
+
+    // Copy selected cells to clipboard (as text)
+    public string CopySelectedCells()
+    {
+        var selection = State.CellSelection;
+        if (selection == null || selection.SelectedCells.Count == 0)
+            return "";
+
+        // Group by row and sort
+        var cellsByRow = selection.SelectedCells
+            .GroupBy(c => c.RowIndex)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        var result = new StringBuilder();
+        
+        foreach (var rowGroup in cellsByRow)
+        {
+            var rowIndex = rowGroup.Key;
+            if (rowIndex >= 0 && rowIndex < RowModel.Rows.Count)
+            {
+                var row = RowModel.Rows[rowIndex];
+                var sortedCells = rowGroup.OrderBy(c => 
+                {
+                    var colIndex = VisibleLeafColumns.ToList().FindIndex(col => col.Id == c.ColumnId);
+                    return colIndex >= 0 ? colIndex : int.MaxValue;
+                }).ToList();
+
+                var cellValues = sortedCells.Select(cellPos =>
+                {
+                    var cell = row.GetCell(cellPos.ColumnId);
+                    return cell.Value?.ToString() ?? "";
+                });
+
+                result.AppendLine(string.Join("\t", cellValues));
+            }
+        }
+
+        return result.ToString().TrimEnd();
+    }
+
+    // Keyboard navigation for cell selection
+    public void NavigateCell(CellNavigationDirection direction)
+    {
+        var activeCell = GetActiveCell();
+        if (activeCell == null) return;
+
+        var visibleColumns = VisibleLeafColumns.ToList();
+        var currentColIndex = visibleColumns.FindIndex(c => c.Id == activeCell.ColumnId);
+        var currentRowIndex = activeCell.RowIndex;
+
+        CellPosition? newActiveCell = direction switch
+        {
+            CellNavigationDirection.Up when currentRowIndex > 0 => 
+                new CellPosition(currentRowIndex - 1, activeCell.ColumnId),
+            
+            CellNavigationDirection.Down when currentRowIndex < RowModel.Rows.Count - 1 => 
+                new CellPosition(currentRowIndex + 1, activeCell.ColumnId),
+            
+            CellNavigationDirection.Left when currentColIndex > 0 => 
+                new CellPosition(currentRowIndex, visibleColumns[currentColIndex - 1].Id),
+            
+            CellNavigationDirection.Right when currentColIndex < visibleColumns.Count - 1 => 
+                new CellPosition(currentRowIndex, visibleColumns[currentColIndex + 1].Id),
+            
+            _ => null
+        };
+
+        if (newActiveCell != null)
+        {
+            SelectCell(newActiveCell.RowIndex, newActiveCell.ColumnId);
+        }
+    }
+
+    public enum CellNavigationDirection
+    {
+        Up,
+        Down,
+        Left,
+        Right
+    }
+
 }
 
 // Factory methods for SaGrid
