@@ -58,12 +58,9 @@ public class SaGridComponent<TData> : Component
             });
         }
 
-        var grid = Grid; // Access the reactive signal once to get the initial grid
-        var header = _headerRenderer.CreateHeader(grid); // Create header once, outside reactive context
-        
         return Reactive(() =>
         {
-            var currentGrid = Grid; // Access the reactive signal for body updates
+            var currentGrid = Grid; // Access the reactive signal for grid updates
 
             var mainBorder = new Border()
                 .BorderThickness(1)
@@ -71,8 +68,8 @@ public class SaGridComponent<TData> : Component
                 .Child(
                     new StackPanel()
                         .Children(
-                            // Header (stable, created once)
-                            header,
+                            // Header (reactive to ensure TextBox events work)
+                            _headerRenderer.CreateHeader(currentGrid),
                             // Body (reactive, updates with grid changes)
                             _bodyRenderer.CreateBody(currentGrid, () => Grid, _selectionSignal?.Item1),
                             // Footer (reactive)
@@ -126,10 +123,15 @@ public class SaGridComponent<TData> : Component
             // Focus the border when clicked to enable keyboard navigation, but not if clicking on a TextBox
             mainBorder.PointerPressed += (sender, e) =>
             {
-                // Don't steal focus if the user clicked on a TextBox
-                if (e.Source is not TextBox)
+                // Don't steal focus if the user clicked on a TextBox or its container
+                if (e.Source is not TextBox && e.Source is not Border border)
                 {
                     mainBorder.Focus();
+                }
+                else if (e.Source is Border borderSource && borderSource.Child is TextBox)
+                {
+                    // If clicking on a border containing a TextBox, focus the TextBox instead
+                    borderSource.Child.Focus();
                 }
             };
 

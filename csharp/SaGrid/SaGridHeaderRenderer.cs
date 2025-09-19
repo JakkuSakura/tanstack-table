@@ -86,7 +86,11 @@ internal class SaGridHeaderRenderer<TData>
             Width = double.NaN, // Auto width
             Height = double.NaN, // Auto height
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Focusable = true,
+            IsEnabled = true,
+            AcceptsReturn = false,
+            AcceptsTab = false
         };
         
         Console.WriteLine($"TextBox created for {column.Id} - Focusable: {textBox.Focusable}, IsEnabled: {textBox.IsEnabled}");
@@ -105,6 +109,7 @@ internal class SaGridHeaderRenderer<TData>
         textBox.PointerPressed += (sender, args) =>
         {
             Console.WriteLine($"TextBox for column {column.Id} pointer pressed");
+            args.Handled = false; // Allow event to bubble up normally
             textBox.Focus();
         };
 
