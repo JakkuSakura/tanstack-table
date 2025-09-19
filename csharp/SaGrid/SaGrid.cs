@@ -1,7 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using TanStack.Table.Core;
 
-namespace TanStack.Table.Core;
+namespace SaGrid;
 
 public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 {

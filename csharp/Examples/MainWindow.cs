@@ -3,12 +3,12 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia;
 using TanStack.Table.Core;
-using TanStack.Table.SolidAvalonia;
+using SaGrid;
 using SolidAvalonia;
 using static SolidAvalonia.Solid;
 using System.Diagnostics;
 
-namespace TanStack.Table.Examples;
+namespace Examples;
 
 public record Person(int Id, string FirstName, string LastName, int Age, string Email, string Department, bool IsActive);
 
@@ -176,9 +176,9 @@ public class MainWindow : Window
         };
         container.Children.Add(infoTextBlock);
 
-        // Create SolidTable display for SaGrid
-        var solidTable = new SolidTable<Person>(saGrid.Options, saGrid);
-        container.Children.Add(solidTable);
+        // Create SaGridComponent display for SaGrid
+        var saGridComponent = new SaGridComponent<Person>(saGrid);
+        container.Children.Add(saGridComponent);
 
         return new ScrollViewer { Content = container };
     }

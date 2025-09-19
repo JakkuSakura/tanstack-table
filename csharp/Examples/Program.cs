@@ -3,7 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Markup.Declarative;
 
-namespace TanStack.Table.Examples;
+namespace Examples;
 
 class Program
 {

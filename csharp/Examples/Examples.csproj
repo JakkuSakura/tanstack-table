@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../TanStack.Table.Core/TanStack.Table.Core.csproj" />
-    <ProjectReference Include="../TanStack.Table.SolidAvalonia/TanStack.Table.SolidAvalonia.csproj" />
+    <ProjectReference Include="../SaGrid/SaGrid.csproj" />
     <ProjectReference Include="../external/SolidAvalonia/SolidAvalonia.csproj" />
   </ItemGroup>
 

@@ -18,12 +18,23 @@ public class SolidTable<TData> : Component
     private Table<TData>? _externalTable;
     private (Func<int>, Action<int>)? _selectionSignal;
 
+    // Renderers
+    private readonly TableHeaderRenderer<TData> _headerRenderer;
+    private readonly TableBodyRenderer<TData> _bodyRenderer;
+    private readonly TableFooterRenderer<TData> _footerRenderer;
+
     public Table<TData> Table => _tableSignal?.Item1() ?? throw new InvalidOperationException("Table not initialized. Call Build() first.");
 
     public SolidTable(TableOptions<TData> options, Table<TData>? externalTable = null) : base(true)
     {
         _options = options;
         _externalTable = externalTable;
+        
+        // Initialize renderers
+        _headerRenderer = new TableHeaderRenderer<TData>();
+        _bodyRenderer = new TableBodyRenderer<TData>();
+        _footerRenderer = new TableFooterRenderer<TData>();
+        
         OnCreatedCore(); // 推送 reactive owner
         Initialize(); // 触发 Build()
     }
@@ -49,17 +60,25 @@ public class SolidTable<TData> : Component
             {
                 OnStateChange = state =>
                 {
-                    Console.WriteLine($"Table state changed - triggering reactive update");
                     originalOnStateChange?.Invoke(state);
-                    // Force signal update to trigger reactive components
-                    signalSetter(_table);
+                    // Update the reactive signal to trigger UI update
+                    signalSetter.Invoke(_table);
                 }
             };
 
-            // If this is not an external table, recreate it with the new options
-            if (_externalTable == null)
+            // For external tables (like SaGrid), we need to handle state changes differently
+            if (_externalTable != null && _externalTable is SaGrid<TData> saGrid)
             {
-                _table = new Table<TData>(newOptions);
+                var (selectionGetter, selectionSetter) = _selectionSignal.Value;
+                var updateCounter = 0;
+
+                // Set up UI update callback for SaGrid
+                saGrid.SetUIUpdateCallback(() =>
+                {
+                    updateCounter++;
+                    signalSetter?.Invoke(saGrid);
+                    selectionSetter?.Invoke(updateCounter); // Use counter instead of selectedCount to force change
+                });
             }
             else
             {
@@ -70,7 +89,7 @@ public class SolidTable<TData> : Component
         }
 
         var table = Table; // Access the reactive signal once to get the initial table
-        var header = CreateHeader(table); // Create header once, outside reactive context
+        var header = _headerRenderer.CreateHeader(table); // Create header once, outside reactive context
         
         return Reactive(() =>
         {
@@ -85,48 +104,19 @@ public class SolidTable<TData> : Component
                             // Header (stable, created once)
                             header,
                             // Body (reactive, updates with table changes)
-                            CreateBody(currentTable),
+                            _bodyRenderer.CreateBody(currentTable, () => Table, _selectionSignal?.Item1), // Pass both table and selection signal getters
                             // Footer (reactive)
-                            CreateFooter(currentTable)
+                            _footerRenderer.CreateFooter(currentTable)
                         )
                 );
 
             // Add keyboard navigation for cell selection
-            if (table is SaGrid<TData> saGrid && saGrid.Options.EnableCellSelection)
+            if (currentTable is SaGrid<TData> saGrid)
             {
-                // Set up the UI update callback to trigger reactive updates
-                var signalSetter = _tableSignal?.Item2;
-                var selectionSetter = _selectionSignal?.Item2;
-                
-                var updateCounter = 0;
-                saGrid.SetUIUpdateCallback(() =>
-                {
-                    updateCounter++;
-                    
-                    // Optional debug logging (uncomment for debugging)
-                    // var cellSelection = saGrid.State.CellSelection;
-                    // var selectedCount = cellSelection?.SelectedCells.Count ?? 0;
-                    // var activeCell = saGrid.GetActiveCell();
-                    // var activeCellInfo = activeCell != null ? $"({activeCell.RowIndex},{activeCell.ColumnId})" : "None";
-                    // Console.WriteLine($"UI callback #{updateCounter}: TotalSelected: {selectedCount}, ActiveCell: {activeCellInfo}");
-                    
-                    // Update both signals to trigger reactive rebuilds
-                    // Use a changing value to force reactive updates
-                    signalSetter?.Invoke(saGrid);
-                    selectionSetter?.Invoke(updateCounter); // Use counter instead of selectedCount to force change
-                });
-
-                mainBorder.Focusable = true;
                 mainBorder.KeyDown += (sender, e) =>
                 {
                     try
                     {
-                        // Don't handle keyboard events if a TextBox has focus (let text input work)
-                        if (e.Source is TextBox)
-                        {
-                            return; // Let TextBox handle its own input
-                        }
-
                         var direction = e.Key switch
                         {
                             Avalonia.Input.Key.Up => SaGrid<TData>.CellNavigationDirection.Up,
@@ -183,381 +173,34 @@ public class SolidTable<TData> : Component
         });
     }
 
-    private Control CreateHeader(Table<TData> table)
+    // Extension support methods
+    public void SetSorting(string columnId, SortDirection? direction)
     {
-        var headerControls = new List<Control>();
-        
-        // Add header title rows
-        headerControls.AddRange(table.HeaderGroups.Select(headerGroup =>
-            new StackPanel()
-                .Orientation(Orientation.Horizontal)
-                .Children(
-                    headerGroup.Headers.Select(header =>
-                        new Border()
-                            .BorderThickness(0, 0, 1, 1)
-                            .BorderBrush(Brushes.LightGray)
-                            .Background(Brushes.LightBlue)
-                            .Width(header.Size)
-                            .Height(40)
-                            .Child(
-                                new TextBlock()
-                                    .Text(GetHeaderContent(header))
-                                    .VerticalAlignment(VerticalAlignment.Center)
-                                    .HorizontalAlignment(HorizontalAlignment.Center)
-                                    .FontWeight(FontWeight.Bold)
-                            )
-                    ).ToArray()
-                )
-        ));
-        
-        // Add filter row if column filtering is enabled
-        if (table.Options.EnableColumnFilters)
+        if (direction.HasValue)
         {
-            var filterRow = CreateFilterRow(table);
-            Console.WriteLine($"Adding filter row to header - Total header controls: {headerControls.Count + 1}");
-            headerControls.Add(filterRow);
+            Table.SetSorting(columnId, direction.Value);
         }
         else
         {
-            Console.WriteLine("Column filtering is disabled - no filter row will be added");
+            // Clear sorting for this column by setting all sorts without this column
+            var currentSorts = Table.State.Sorting?.Columns ?? new List<ColumnSort>();
+            var newSorts = currentSorts.Where(s => s.Id != columnId).ToList();
+            Table.SetSorting(newSorts);
         }
-        
-        return new StackPanel()
-            .Orientation(Orientation.Vertical)
-            .Children(headerControls.ToArray());
-    }
-
-    private Control CreateFilterRow(Table<TData> table)
-    {
-        Console.WriteLine($"Creating filter row with {table.VisibleLeafColumns.Count} columns");
-        
-        var filterControls = table.VisibleLeafColumns.Select(column =>
-        {
-            Console.WriteLine($"Creating filter for column: {column.Id}");
-            var textBox = CreateFilterTextBox(table, column);
-            return new Border()
-                .BorderThickness(0, 0, 1, 1)
-                .BorderBrush(Brushes.LightGray)
-                .Background(Brushes.White)
-                .Width(column.Size)
-                .Height(35)
-                .Padding(new Thickness(2))
-                .Child(textBox);
-        }).ToArray();
-
-        return new StackPanel()
-            .Orientation(Orientation.Horizontal)
-            .Children(filterControls);
-    }
-
-    private Control CreateFilterTextBox(Table<TData> table, Column<TData> column)
-    {
-        Console.WriteLine($"Creating TextBox for column {column.Id}");
-        
-        var textBox = new TextBox
-        {
-            Watermark = $"Filter {column.Id}...",
-            Width = double.NaN, // Auto width
-            Height = double.NaN, // Auto height
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
-        };
-        
-        Console.WriteLine($"TextBox created for {column.Id} - Focusable: {textBox.Focusable}, IsEnabled: {textBox.IsEnabled}");
-
-        // Add multiple event handlers to debug what's happening
-        textBox.GotFocus += (sender, args) =>
-        {
-            Console.WriteLine($"TextBox for column {column.Id} got focus");
-        };
-
-        textBox.LostFocus += (sender, args) =>
-        {
-            Console.WriteLine($"TextBox for column {column.Id} lost focus");
-        };
-
-        textBox.PointerPressed += (sender, args) =>
-        {
-            Console.WriteLine($"TextBox for column {column.Id} pointer pressed");
-            textBox.Focus();
-        };
-
-        textBox.PointerEntered += (sender, args) =>
-        {
-            Console.WriteLine($"TextBox for column {column.Id} pointer entered");
-        };
-
-        textBox.KeyDown += (sender, args) =>
-        {
-            Console.WriteLine($"TextBox for column {column.Id} key down: {args.Key}");
-        };
-
-        textBox.TextChanging += (sender, args) =>
-        {
-            Console.WriteLine($"TextBox for column {column.Id} text changing");
-        };
-
-        textBox.TextChanged += (sender, args) =>
-        {
-            if (table is SaGrid<TData> saGrid && sender is TextBox tb)
-            {
-                var filterValue = string.IsNullOrWhiteSpace(tb.Text) ? (object?)null : tb.Text;
-                Console.WriteLine($"Filter changed for column {column.Id}: '{tb.Text}' -> {(filterValue == null ? "null" : filterValue)}");
-                saGrid.SetColumnFilter(column.Id, filterValue);
-            }
-        };
-
-        return textBox;
-    }
-
-    private Control CreateBody(Table<TData> table)
-    {
-        return new ScrollViewer()
-            .Content(
-                new StackPanel()
-                    .Orientation(Orientation.Vertical)
-                    .Children(
-                        table.RowModel.Rows.Select(row =>
-                            CreateRow(table, row)
-                        ).ToArray()
-                    )
-            );
-    }
-
-    private Control CreateRow(Table<TData> table, Row<TData> row)
-    {
-        return new StackPanel()
-            .Orientation(Orientation.Horizontal)
-            .Background(row.Index % 2 == 0 ? Brushes.White : Brushes.AliceBlue)
-            .Children(
-                table.VisibleLeafColumns.Select(column =>
-                    CreateCell(table, row, column)
-                ).ToArray()
-            );
-    }
-
-    private Control CreateCell(Table<TData> table, Row<TData> row, Column<TData> column)
-    {
-        // For SaGrid with cell selection, create a reactive cell
-        if (table is SaGrid<TData> saGrid && saGrid.Options.EnableCellSelection)
-        {
-            return CreateReactiveCell(saGrid, row, column);
-        }
-
-        // For regular table, create a simple cell
-        return new Border()
-            .BorderThickness(0, 0, 1, 1)
-            .BorderBrush(Brushes.LightGray)
-            .Background(GetCellBackground(false, false, row.Index))
-            .Width(column.Size)
-            .Height(35)
-            .Child(
-                new TextBlock()
-                    .Text(GetCellContent(row, column))
-                    .VerticalAlignment(VerticalAlignment.Center)
-                    .Margin(8, 0)
-            );
-    }
-
-    private Control CreateReactiveCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column)
-    {
-        return Reactive(() =>
-        {
-            // Access the reactive signals to trigger updates - the selection signal is the key dependency
-            var updateCounter = _selectionSignal?.Item1() ?? 0; // This triggers on selection changes
-            var currentTable = Table; // This is the reactive table signal
-            
-            // Access selection state through the reactive table signal instead of saGrid directly
-            var currentSaGrid = currentTable as SaGrid<TData>;
-            var isSelected = currentSaGrid?.IsCellSelected(row.Index, column.Id) ?? false;
-            var activeCell = currentSaGrid?.GetActiveCell();
-            var isActiveCell = activeCell?.RowIndex == row.Index && activeCell?.ColumnId == column.Id;
-            
-            // Optional debug logging (uncomment for debugging)
-            // if (updateCounter > 0 && (isSelected || isActiveCell))
-            // {
-            //     Console.WriteLine($"REACTIVE EVAL: Cell ({row.Index},{column.Id}) - updateCounter={updateCounter}, Selected={isSelected}, Active={isActiveCell}");
-            // }
-            
-            // Optional detailed debug logging (uncomment for debugging)
-            // if (isSelected || isActiveCell)
-            // {
-            //     var cellSelection = currentSaGrid?.State.CellSelection;
-            //     var selectedCellsCount = cellSelection?.SelectedCells?.Count ?? 0;
-            //     var selectedCellsList = cellSelection?.SelectedCells?.Select(c => $"({c.RowIndex},{c.ColumnId})").ToArray() ?? new string[0];
-            //     var selectedCellsStr = string.Join(",", selectedCellsList);
-            //     Console.WriteLine($"*** SELECTED/ACTIVE cell: Row {row.Index}, Col {column.Id}, Selected: {isSelected}, Active: {isActiveCell}, UpdateCounter: {updateCounter}, SelectedCells: [{selectedCellsStr}]");
-            // }
-
-            // Determine cell styling based on current selection state
-            var cellBackground = GetCellBackground(isSelected, isActiveCell, row.Index);
-            var cellBorderBrush = isActiveCell ? Brushes.Blue : (isSelected ? Brushes.DarkBlue : Brushes.LightGray);
-            var cellBorderThickness = isActiveCell ? 3 : (isSelected ? 2 : 1);
-
-            var cellBorder = new Border()
-                .BorderThickness(0, 0, cellBorderThickness, cellBorderThickness)
-                .BorderBrush(cellBorderBrush)
-                .Background(cellBackground)
-                .Width(column.Size)
-                .Height(35)
-                .Child(
-                    new TextBlock()
-                        .Text(GetCellContent(row, column))
-                        .VerticalAlignment(VerticalAlignment.Center)
-                        .Margin(8, 0)
-                        .Foreground(isSelected || isActiveCell ? Brushes.White : Brushes.Black)
-                );
-
-            // Add click handling
-            cellBorder.PointerPressed += (sender, e) =>
-            {
-                try
-                {
-                    var isCtrlPressed = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
-                    Console.WriteLine($"Cell clicked: Row {row.Index}, Column {column.Id}, Ctrl: {isCtrlPressed}");
-                    
-                    saGrid.SelectCell(row.Index, column.Id, isCtrlPressed);
-                    // UI update callback will be triggered automatically by saGrid.SelectCell()
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error handling cell click: {ex.Message}");
-                }
-            };
-
-            // Add hover effect (only for unselected cells)
-            if (!isSelected && !isActiveCell)
-            {
-                cellBorder.PointerEntered += (sender, e) =>
-                {
-                    cellBorder.Background = Brushes.LightSteelBlue;
-                };
-
-                cellBorder.PointerExited += (sender, e) =>
-                {
-                    cellBorder.Background = GetCellBackground(false, false, row.Index);
-                };
-            }
-
-            return cellBorder;
-        });
-    }
-
-    private IBrush GetCellBackground(bool isSelected, bool isActiveCell, int rowIndex)
-    {
-        if (isActiveCell)
-            return Brushes.Orange; // More visible active cell
-        if (isSelected)
-            return Brushes.LightBlue; // More visible selected cell
-        return rowIndex % 2 == 0 ? Brushes.White : Brushes.AliceBlue;
-    }
-
-    private Control CreateFooter(Table<TData> table)
-    {
-        if (!table.FooterGroups.Any())
-            return new Panel(); // Empty footer
-
-        return new StackPanel()
-            .Orientation(Orientation.Vertical)
-            .Children(
-                table.FooterGroups.Select(footerGroup =>
-                    new StackPanel()
-                        .Orientation(Orientation.Horizontal)
-                        .Children(
-                            footerGroup.Headers.Select(header =>
-                                new Border()
-                                    .BorderThickness(0, 1, 1, 0)
-                                    .BorderBrush(Brushes.LightGray)
-                                    .Background(Brushes.LightGray)
-                                    .Width(header.Size)
-                                    .Height(35)
-                                    .Child(
-                                        new TextBlock()
-                                            .Text(GetFooterContent(header))
-                                            .VerticalAlignment(VerticalAlignment.Center)
-                                            .HorizontalAlignment(HorizontalAlignment.Center)
-                                            .FontWeight(FontWeight.Bold)
-                                    )
-                            ).ToArray()
-                        )
-                ).ToArray()
-            );
-    }
-
-    private string GetHeaderContent(IHeader<TData> header)
-    {
-        return header.Column.ColumnDef.Header?.ToString() ?? header.Column.Id;
-    }
-
-    private string GetFooterContent(IHeader<TData> header)
-    {
-        return header.Column.ColumnDef.Footer?.ToString() ?? "";
-    }
-
-    private string GetCellContent(Row<TData> row, Column<TData> column)
-    {
-        try
-        {
-            var cell = row.GetCell(column.Id);
-            if (cell == null)
-            {
-                Console.WriteLine($"DEBUG cell null row={row.Id} colId={column.Id}");
-                return "";
-            }
-
-            var v = cell.Value;
-            Console.WriteLine($"DEBUG cell row={row.Id} col={column.Id} value={(v==null?"<null>":v)}");
-            return v?.ToString() ?? "";
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"DEBUG GetCellContent exception row={row.Id} colId={column.Id}: {ex}");
-            return "";
-        }
-    }
-
-    // Reactive helper methods for common table operations
-    public void SetSorting(string columnId, SortDirection? direction = null)
-    {
-        var column = Table.GetColumn(columnId);
-        column?.ToggleSorting(direction);
-    }
-
-    public void SetFilter(string columnId, object? value)
-    {
-        var column = Table.GetColumn(columnId);
-        column?.SetFilterValue(value);
-    }
-
-    public void SetGlobalFilter(object? value)
-    {
-        Table.SetState(state => state with
-        {
-            GlobalFilter = value != null ? new GlobalFilterState(value) : null
-        });
-    }
-
-    public void ToggleRowSelection(string rowId)
-    {
-        var row = Table.GetRow(rowId);
-        row?.ToggleSelected();
     }
 
     public void SetPageIndex(int pageIndex)
     {
-        var currentPagination = Table.State.Pagination ?? new PaginationState();
-        Table.SetState(state => state with
-        {
-            Pagination = currentPagination with { PageIndex = pageIndex }
-        });
+        Table.SetPageIndex(pageIndex);
     }
 
     public void SetPageSize(int pageSize)
     {
-        var currentPagination = Table.State.Pagination ?? new PaginationState();
-        Table.SetState(state => state with
-        {
-            Pagination = currentPagination with { PageSize = pageSize }
-        });
+        Table.SetPageSize(pageSize);
+    }
+
+    public string GetHeaderContent(IHeader<TData> header)
+    {
+        return TableContentHelper<TData>.GetHeaderContent(header);
     }
 }
