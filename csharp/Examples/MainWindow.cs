@@ -20,8 +20,8 @@ public class MainWindow : Window
         InitializeComponent();
     }
 
-    private SaGrid<Person> saGrid;
-    private TextBlock infoTextBlock;
+    private SaGrid<Person> saGrid = null!;
+    private TextBlock infoTextBlock = null!;
 
     private void InitializeComponent()
     {
