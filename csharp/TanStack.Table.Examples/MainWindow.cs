@@ -137,44 +137,16 @@ public class MainWindow : Window
     {
         var container = new StackPanel { Orientation = Orientation.Vertical };
 
-        // Header section
-        var headerBorder = new Border
+        // Simple header
+        var header = new TextBlock
         {
-            Background = new LinearGradientBrush
-            {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(Colors.LightBlue, 0),
-                    new GradientStop(Colors.LightGreen, 1)
-                }
-            },
-            BorderThickness = new Thickness(2),
-            BorderBrush = Brushes.DarkBlue,
-            Margin = new Thickness(10),
-            CornerRadius = new CornerRadius(10),
-            Child = new TextBlock
-            {
-                Text = "🚀 SaGrid Advanced Table - Full Feature Demo 🚀\n\n" +
-                       "✨ Advanced sorting and filtering\n" +
-                       "📊 Export to CSV/JSON\n" +
-                       "🎨 Custom themes and renderers\n" +
-                       "⚙️ Row actions and context menus\n" +
-                       "📱 Column resizing and reordering\n" +
-                       "🔍 Global and column-specific filtering\n" +
-                       "🎯 Cell selection and navigation\n" +
-                       "📋 Copy selected cells to clipboard\n" +
-                       "🖱️ Click cells to select (Ctrl+Click for multi-select)\n" +
-                       "⌨️ Arrow keys to navigate, Ctrl+C to copy, Esc to clear",
-                FontSize = 16,
-                FontWeight = FontWeight.Bold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(20),
-                Foreground = Brushes.DarkBlue
-            }
+            Text = "SaGrid Advanced Table Demo",
+            FontSize = 18,
+            FontWeight = FontWeight.Bold,
+            Margin = new Thickness(20, 10),
+            HorizontalAlignment = HorizontalAlignment.Center
         };
-        container.Children.Add(headerBorder);
+        container.Children.Add(header);
 
         // Controls section
         var controlsPanel = CreateControlsPanel();
@@ -205,80 +177,7 @@ public class MainWindow : Window
             Margin = new Thickness(20, 10)
         };
 
-        // Search controls
-        var searchPanel = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 0, 0, 10)
-        };
-
-        searchPanel.Children.Add(new TextBlock 
-        { 
-            Text = "🔍 Global Search:", 
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0),
-            FontWeight = FontWeight.Bold
-        });
-
-        var searchBox = new TextBox
-        {
-            Watermark = "Search all columns...",
-            Width = 200,
-            Height = 30
-        };
-
-        searchBox.TextChanged += (sender, e) =>
-        {
-            if (sender is TextBox tb)
-            {
-                saGrid.SetGlobalFilter(tb.Text);
-                UpdateInfoText();
-            }
-        };
-
-        searchPanel.Children.Add(searchBox);
-        panel.Children.Add(searchPanel);
-
-        // Department filter
-        var deptPanel = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 0, 0, 10)
-        };
-
-        deptPanel.Children.Add(new TextBlock 
-        { 
-            Text = "🏢 Department Filter:", 
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0),
-            FontWeight = FontWeight.Bold
-        });
-
-        var deptCombo = new ComboBox
-        {
-            Width = 150,
-            Items = { "All", "Engineering", "Marketing", "Sales", "HR", "Finance", "Operations", "Support" },
-            SelectedIndex = 0
-        };
-
-        deptCombo.SelectionChanged += (sender, e) =>
-        {
-            if (sender is ComboBox cb && cb.SelectedItem is string dept)
-            {
-                if (dept == "All")
-                {
-                    saGrid.ClearColumnFilters();
-                }
-                else
-                {
-                    saGrid.SetColumnFilter("department", dept);
-                }
-                UpdateInfoText();
-            }
-        };
-
-        deptPanel.Children.Add(deptCombo);
-        panel.Children.Add(deptPanel);
+        // Note: Column filtering is now handled directly in the table headers
 
         // Action buttons
         var buttonPanel = new StackPanel 

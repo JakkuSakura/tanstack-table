@@ -6,6 +6,7 @@ using SolidAvalonia;
 using TanStack.Table.Core;
 using static SolidAvalonia.Solid;
 using Avalonia.LogicalTree;
+using Avalonia;
 
 namespace TanStack.Table.SolidAvalonia;
 
@@ -97,12 +98,14 @@ public class SolidTable<TData> : Component
                 var updateCounter = 0;
                 saGrid.SetUIUpdateCallback(() =>
                 {
-                    var cellSelection = saGrid.State.CellSelection;
-                    var selectedCount = cellSelection?.SelectedCells.Count ?? 0;
-                    var activeCell = saGrid.GetActiveCell();
-                    var activeCellInfo = activeCell != null ? $"({activeCell.RowIndex},{activeCell.ColumnId})" : "None";
                     updateCounter++;
-                    Console.WriteLine($"UI callback #{updateCounter}: TotalSelected: {selectedCount}, ActiveCell: {activeCellInfo}");
+                    
+                    // Optional debug logging (uncomment for debugging)
+                    // var cellSelection = saGrid.State.CellSelection;
+                    // var selectedCount = cellSelection?.SelectedCells.Count ?? 0;
+                    // var activeCell = saGrid.GetActiveCell();
+                    // var activeCellInfo = activeCell != null ? $"({activeCell.RowIndex},{activeCell.ColumnId})" : "None";
+                    // Console.WriteLine($"UI callback #{updateCounter}: TotalSelected: {selectedCount}, ActiveCell: {activeCellInfo}");
                     
                     // Update both signals to trigger reactive rebuilds
                     // Use a changing value to force reactive updates
@@ -169,31 +172,82 @@ public class SolidTable<TData> : Component
 
     private Control CreateHeader(Table<TData> table)
     {
+        var headerControls = new List<Control>();
+        
+        // Add header title rows
+        headerControls.AddRange(table.HeaderGroups.Select(headerGroup =>
+            new StackPanel()
+                .Orientation(Orientation.Horizontal)
+                .Children(
+                    headerGroup.Headers.Select(header =>
+                        new Border()
+                            .BorderThickness(0, 0, 1, 1)
+                            .BorderBrush(Brushes.LightGray)
+                            .Background(Brushes.LightBlue)
+                            .Width(header.Size)
+                            .Height(40)
+                            .Child(
+                                new TextBlock()
+                                    .Text(GetHeaderContent(header))
+                                    .VerticalAlignment(VerticalAlignment.Center)
+                                    .HorizontalAlignment(HorizontalAlignment.Center)
+                                    .FontWeight(FontWeight.Bold)
+                            )
+                    ).ToArray()
+                )
+        ));
+        
+        // Add filter row if column filtering is enabled
+        if (table.Options.EnableColumnFilters)
+        {
+            headerControls.Add(CreateFilterRow(table));
+        }
+        
         return new StackPanel()
             .Orientation(Orientation.Vertical)
+            .Children(headerControls.ToArray());
+    }
+
+    private Control CreateFilterRow(Table<TData> table)
+    {
+        return new StackPanel()
+            .Orientation(Orientation.Horizontal)
             .Children(
-                table.HeaderGroups.Select(headerGroup =>
-                    new StackPanel()
-                        .Orientation(Orientation.Horizontal)
-                        .Children(
-                            headerGroup.Headers.Select(header =>
-                                new Border()
-                                    .BorderThickness(0, 0, 1, 1)
-                                    .BorderBrush(Brushes.LightGray)
-                                    .Background(Brushes.LightBlue)
-                                    .Width(header.Size)
-                                    .Height(40)
-                                    .Child(
-                                        new TextBlock()
-                                            .Text(GetHeaderContent(header))
-                                            .VerticalAlignment(VerticalAlignment.Center)
-                                            .HorizontalAlignment(HorizontalAlignment.Center)
-                                            .FontWeight(FontWeight.Bold)
-                                    )
-                            ).ToArray()
+                table.VisibleLeafColumns.Select(column =>
+                    new Border()
+                        .BorderThickness(0, 0, 1, 1)
+                        .BorderBrush(Brushes.LightGray)
+                        .Background(Brushes.White)
+                        .Width(column.Size)
+                        .Height(35)
+                        .Child(
+                            CreateFilterTextBox(table, column)
                         )
                 ).ToArray()
             );
+    }
+
+    private Control CreateFilterTextBox(Table<TData> table, Column<TData> column)
+    {
+        var textBox = new TextBox()
+        {
+            Watermark = $"Filter {column.Id}...",
+            Margin = new Thickness(4),
+            FontSize = 12,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0)
+        };
+
+        textBox.TextChanged += (sender, args) =>
+        {
+            if (table is SaGrid<TData> saGrid)
+            {
+                var filterValue = string.IsNullOrWhiteSpace(textBox.Text) ? (object?)null : textBox.Text;
+                saGrid.SetColumnFilter(column.Id, filterValue);
+            }
+        };
+
+        return textBox;
     }
 
     private Control CreateBody(Table<TData> table)
@@ -259,21 +313,21 @@ public class SolidTable<TData> : Component
             var activeCell = currentSaGrid?.GetActiveCell();
             var isActiveCell = activeCell?.RowIndex == row.Index && activeCell?.ColumnId == column.Id;
             
-            // Log reactive evaluation for all cells during updates
-            if (updateCounter > 0)
-            {
-                Console.WriteLine($"REACTIVE EVAL: Cell ({row.Index},{column.Id}) - updateCounter={updateCounter}, Selected={isSelected}, Active={isActiveCell}");
-            }
+            // Optional debug logging (uncomment for debugging)
+            // if (updateCounter > 0 && (isSelected || isActiveCell))
+            // {
+            //     Console.WriteLine($"REACTIVE EVAL: Cell ({row.Index},{column.Id}) - updateCounter={updateCounter}, Selected={isSelected}, Active={isActiveCell}");
+            // }
             
-            // Debug logging with selection signal info
-            if (isSelected || isActiveCell)
-            {
-                var cellSelection = currentSaGrid?.State.CellSelection;
-                var selectedCellsCount = cellSelection?.SelectedCells?.Count ?? 0;
-                var selectedCellsList = cellSelection?.SelectedCells?.Select(c => $"({c.RowIndex},{c.ColumnId})").ToArray() ?? new string[0];
-                var selectedCellsStr = string.Join(",", selectedCellsList);
-                Console.WriteLine($"*** SELECTED/ACTIVE cell: Row {row.Index}, Col {column.Id}, Selected: {isSelected}, Active: {isActiveCell}, UpdateCounter: {updateCounter}, SelectedCells: [{selectedCellsStr}]");
-            }
+            // Optional detailed debug logging (uncomment for debugging)
+            // if (isSelected || isActiveCell)
+            // {
+            //     var cellSelection = currentSaGrid?.State.CellSelection;
+            //     var selectedCellsCount = cellSelection?.SelectedCells?.Count ?? 0;
+            //     var selectedCellsList = cellSelection?.SelectedCells?.Select(c => $"({c.RowIndex},{c.ColumnId})").ToArray() ?? new string[0];
+            //     var selectedCellsStr = string.Join(",", selectedCellsList);
+            //     Console.WriteLine($"*** SELECTED/ACTIVE cell: Row {row.Index}, Col {column.Id}, Selected: {isSelected}, Active: {isActiveCell}, UpdateCounter: {updateCounter}, SelectedCells: [{selectedCellsStr}]");
+            // }
 
             // Determine cell styling based on current selection state
             var cellBackground = GetCellBackground(isSelected, isActiveCell, row.Index);
