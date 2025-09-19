@@ -31,6 +31,28 @@ public interface ITable<TData>
     void ResetExpanded();
     void ResetGrouping();
     void ResetPagination();
+    
+    // Pagination methods
+    int GetPageCount();
+    bool GetCanPreviousPage();
+    bool GetCanNextPage();
+    void NextPage();
+    void PreviousPage();
+    void FirstPage();
+    void LastPage();
+    void SetPageIndex(int pageIndex);
+    void SetPageSize(int pageSize);
+    
+    // Row selection methods
+    bool GetIsAllRowsSelected();
+    bool GetIsSomeRowsSelected();
+    void SelectAllRows();
+    void DeselectAllRows();
+    void ToggleAllRowsSelected();
+    void SetRowSelection(string rowId, bool selected);
+    void SelectRowRange(int startIndex, int endIndex);
+    int GetSelectedRowCount();
+    int GetTotalRowCount();
 }
 
 public interface IColumn<TData, TValue> : IColumn<TData>
@@ -137,4 +159,34 @@ public interface ITableFeature<TData>
     void Initialize(ITable<TData> table);
     TableState<TData> GetInitialState(TableOptions<TData> options);
     void OnStateChange(ITable<TData> table, TableState<TData> state);
+}
+
+public interface ISaGrid<TData> : ITable<TData>
+{
+    // Advanced filtering capabilities
+    void SetGlobalFilter(object? value);
+    object? GetGlobalFilterValue();
+    void ClearGlobalFilter();
+    
+    // Export functionality
+    Task<string> ExportToCsvAsync();
+    Task<string> ExportToJsonAsync();
+    string ExportToCsv();
+    string ExportToJson();
+    
+    // Advanced search and filtering
+    void SetQuickFilter(string? searchTerm);
+    string? GetQuickFilter();
+    
+    // Advanced column operations
+    void SetColumnVisibility(string columnId, bool visible);
+    bool GetColumnVisibility(string columnId);
+    int GetVisibleColumnCount();
+    int GetTotalColumnCount();
+    int GetHiddenColumnCount();
+    
+    // Keyboard navigation
+    void HandleKeyDown(string key);
+    Cell<TData>? GetCurrentCell();
+    Row<TData>? GetCurrentRow();
 }

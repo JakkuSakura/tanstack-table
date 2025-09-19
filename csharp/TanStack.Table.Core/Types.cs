@@ -29,6 +29,7 @@ public record TableOptions<TData>
     public bool EnableColumnReordering { get; init; } = false;
     public bool EnableColumnPinning { get; init; } = false;
     public bool EnablePagination { get; init; } = false;
+    public bool EnableVirtualization { get; init; } = false;
     public Dictionary<string, object>? Meta { get; init; }
 }
 
@@ -89,6 +90,11 @@ public record ExpandedState(Dictionary<string, bool> Items = null!)
 public record RowSelectionState(Dictionary<string, bool> Items = null!)
 {
     public Dictionary<string, bool> Items { get; init; } = Items ?? new();
+
+    public bool GetValueOrDefault(string key, bool defaultValue = false)
+    {
+        return Items.GetValueOrDefault(key, defaultValue);
+    }
 }
 
 public record ColumnOrderState(List<string> Order = null!)
@@ -110,6 +116,11 @@ public record ColumnSizingState(Dictionary<string, double> Items = null!)
 public record ColumnVisibilityState(Dictionary<string, bool> Items = null!)
 {
     public Dictionary<string, bool> Items { get; init; } = Items ?? new();
+
+    public bool GetValueOrDefault(string key, bool defaultValue = true)
+    {
+        return Items.GetValueOrDefault(key, defaultValue);
+    }
 }
 
 public record PaginationState
@@ -149,4 +160,31 @@ public record ColumnDef<TData, TValue> : ColumnDef<TData>
 public record GroupColumnDef<TData> : ColumnDef<TData>
 {
     public required IReadOnlyList<ColumnDef<TData>> Columns { get; init; }
+}
+
+// Context menu and row actions support
+public record ContextMenuItem
+{
+    public required string Id { get; init; }
+    public required string Label { get; init; }
+    public required Action<object> Action { get; init; }
+    public bool IsEnabled { get; init; } = true;
+    public bool IsSeparator { get; init; } = false;
+
+    // Constructor for test compatibility
+    public ContextMenuItem(string id, string label)
+    {
+        Id = id;
+        Label = label;
+        Action = _ => { }; // Default empty action
+    }
+}
+
+public record RowAction<TData>
+{
+    public required string Id { get; init; }
+    public required string Label { get; init; }
+    public required Action<Row<TData>> Action { get; init; }
+    public bool IsEnabled { get; init; } = true;
+    public string? Icon { get; init; }
 }

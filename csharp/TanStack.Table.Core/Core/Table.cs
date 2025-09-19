@@ -129,10 +129,10 @@ public class Table<TData> : ITable<TData>
         var coreRowModel = GetCoreRowModel();
         PreFilteredRowModel = coreRowModel;
         
-        var filteredRowModel = Options.GetFilteredRowModel?.Invoke(this) ?? coreRowModel;
+        var filteredRowModel = Options.GetFilteredRowModel?.Invoke(this) ?? GetFilteredRowModel(coreRowModel);
         PreSortedRowModel = filteredRowModel;
         
-        var sortedRowModel = Options.GetSortedRowModel?.Invoke(this) ?? filteredRowModel;
+        var sortedRowModel = Options.GetSortedRowModel?.Invoke(this) ?? GetSortedRowModel(filteredRowModel);
         PreGroupedRowModel = sortedRowModel;
         
         var groupedRowModel = Options.GetGroupedRowModel?.Invoke(this) ?? sortedRowModel;
@@ -141,7 +141,7 @@ public class Table<TData> : ITable<TData>
         var expandedRowModel = Options.GetExpandedRowModel?.Invoke(this) ?? groupedRowModel;
         PrePaginationRowModel = expandedRowModel;
         
-        RowModel = Options.GetPaginationRowModel?.Invoke(this) ?? expandedRowModel;
+        RowModel = Options.GetPaginationRowModel?.Invoke(this) ?? GetPaginatedRowModel(expandedRowModel);
         
         UpdateRowMap();
     }
@@ -170,6 +170,33 @@ public class Table<TData> : ITable<TData>
             Rows = rows.AsReadOnly(),
             FlatRows = flatRows.AsReadOnly(),
             RowsById = rowsById.AsReadOnly()
+        };
+    }
+
+    private RowModel<TData> GetPaginatedRowModel(RowModel<TData> rowModel)
+    {
+        var pagination = _state.Pagination;
+        if (pagination == null)
+            return rowModel;
+
+        var startIndex = pagination.PageIndex * pagination.PageSize;
+        var endIndex = Math.Min(startIndex + pagination.PageSize, rowModel.Rows.Count);
+        
+        var paginatedRows = new List<Row<TData>>();
+        
+        for (int i = startIndex; i < endIndex; i++)
+        {
+            if (i < rowModel.Rows.Count)
+            {
+                paginatedRows.Add(rowModel.Rows[i]);
+            }
+        }
+
+        return new RowModel<TData>
+        {
+            Rows = paginatedRows.AsReadOnly(),
+            FlatRows = rowModel.FlatRows, // Keep all flat rows for reference
+            RowsById = rowModel.RowsById   // Keep all rows by ID for lookups
         };
     }
 
@@ -311,5 +338,569 @@ public class Table<TData> : ITable<TData>
     public void ResetPagination()
     {
         SetState(state => state with { Pagination = null });
+    }
+
+    // Sorting methods
+    public void SetSorting(IEnumerable<ColumnSort> sorts)
+    {
+        var sortList = sorts.ToList();
+        SetState(state => state with 
+        { 
+            Sorting = sortList.Count > 0 ? new SortingState(sortList) : null
+        });
+    }
+
+    public void SetSorting(string columnId, SortDirection direction)
+    {
+        SetSorting(new[] { new ColumnSort(columnId, direction) });
+    }
+
+    public void AddSort(string columnId, SortDirection direction)
+    {
+        var currentSorting = State.Sorting?.Columns ?? new List<ColumnSort>();
+        var newSorting = currentSorting.Where(s => s.Id != columnId).ToList();
+        newSorting.Add(new ColumnSort(columnId, direction));
+        SetSorting(newSorting);
+    }
+
+    public void RemoveSort(string columnId)
+    {
+        var currentSorting = State.Sorting?.Columns ?? new List<ColumnSort>();
+        var newSorting = currentSorting.Where(s => s.Id != columnId).ToList();
+        SetSorting(newSorting);
+    }
+
+    public void ToggleSort(string columnId)
+    {
+        var currentSorting = State.Sorting?.Columns ?? new List<ColumnSort>();
+        var existingSort = currentSorting.FirstOrDefault(s => s.Id == columnId);
+        
+        if (existingSort == null)
+        {
+            AddSort(columnId, SortDirection.Ascending);
+        }
+        else if (existingSort.Direction == SortDirection.Ascending)
+        {
+            var newSorting = currentSorting.Where(s => s.Id != columnId).ToList();
+            newSorting.Add(new ColumnSort(columnId, SortDirection.Descending));
+            SetSorting(newSorting);
+        }
+        else
+        {
+            RemoveSort(columnId);
+        }
+    }
+
+    public int GetPageCount()
+    {
+        var pagination = _state.Pagination;
+        if (pagination == null) return 1;
+
+        var totalRows = PrePaginationRowModel.Rows.Count;
+        return (int)Math.Ceiling((double)totalRows / pagination.PageSize);
+    }
+
+    public bool GetCanPreviousPage()
+    {
+        var pagination = _state.Pagination;
+        return pagination != null && pagination.PageIndex > 0;
+    }
+
+    public bool GetCanNextPage()
+    {
+        var pagination = _state.Pagination;
+        if (pagination == null) return false;
+
+        return pagination.PageIndex < GetPageCount() - 1;
+    }
+
+    public void NextPage()
+    {
+        var pagination = _state.Pagination;
+        if (pagination == null || !GetCanNextPage()) return;
+
+        SetState(state => state with 
+        { 
+            Pagination = pagination with { PageIndex = pagination.PageIndex + 1 }
+        });
+    }
+
+    public void PreviousPage()
+    {
+        var pagination = _state.Pagination;
+        if (pagination == null || !GetCanPreviousPage()) return;
+
+        SetState(state => state with 
+        { 
+            Pagination = pagination with { PageIndex = pagination.PageIndex - 1 }
+        });
+    }
+
+    public void FirstPage()
+    {
+        var pagination = _state.Pagination;
+        if (pagination == null) return;
+
+        SetState(state => state with 
+        { 
+            Pagination = pagination with { PageIndex = 0 }
+        });
+    }
+
+    public void LastPage()
+    {
+        var pagination = _state.Pagination;
+        if (pagination == null) return;
+
+        var lastPageIndex = Math.Max(0, GetPageCount() - 1);
+        SetState(state => state with 
+        { 
+            Pagination = pagination with { PageIndex = lastPageIndex }
+        });
+    }
+
+    public void SetPageIndex(int pageIndex)
+    {
+        var pagination = _state.Pagination ?? new PaginationState();
+        var maxPageIndex = Math.Max(0, GetPageCount() - 1);
+        var clampedPageIndex = Math.Max(0, Math.Min(pageIndex, maxPageIndex));
+
+        SetState(state => state with 
+        { 
+            Pagination = pagination with { PageIndex = clampedPageIndex }
+        });
+    }
+
+    public void SetPageSize(int pageSize)
+    {
+        var pagination = _state.Pagination ?? new PaginationState();
+        var normalizedPageSize = Math.Max(1, pageSize);
+
+        SetState(state => state with 
+        { 
+            Pagination = pagination with { PageSize = normalizedPageSize }
+        });
+    }
+
+    public bool GetIsAllRowsSelected()
+    {
+        var selection = _state.RowSelection;
+        if (selection == null) return false;
+
+        var totalRows = PrePaginationRowModel.Rows;
+        return totalRows.Count > 0 && totalRows.All(row => 
+            selection.Items.GetValueOrDefault(row.Id, false));
+    }
+
+    public bool GetIsSomeRowsSelected()
+    {
+        var selection = _state.RowSelection;
+        if (selection == null) return false;
+
+        return PrePaginationRowModel.Rows.Any(row => 
+            selection.Items.GetValueOrDefault(row.Id, false));
+    }
+
+    public void SelectAllRows()
+    {
+        var selection = _state.RowSelection ?? new RowSelectionState();
+        var newItems = new Dictionary<string, bool>(selection.Items);
+
+        foreach (var row in PrePaginationRowModel.Rows)
+        {
+            newItems[row.Id] = true;
+        }
+
+        SetState(state => state with 
+        { 
+            RowSelection = new RowSelectionState(newItems)
+        });
+    }
+
+    public void DeselectAllRows()
+    {
+        SetState(state => state with { RowSelection = null });
+    }
+
+    public void ToggleAllRowsSelected()
+    {
+        if (GetIsAllRowsSelected())
+        {
+            DeselectAllRows();
+        }
+        else
+        {
+            SelectAllRows();
+        }
+    }
+
+    public void SetRowSelection(string rowId, bool selected)
+    {
+        var selection = _state.RowSelection ?? new RowSelectionState();
+        var newItems = new Dictionary<string, bool>(selection.Items);
+
+        if (selected)
+        {
+            newItems[rowId] = true;
+        }
+        else
+        {
+            newItems.Remove(rowId);
+        }
+
+        SetState(state => state with 
+        { 
+            RowSelection = newItems.Count > 0 ? new RowSelectionState(newItems) : null
+        });
+    }
+
+    public void SelectRowRange(int startIndex, int endIndex)
+    {
+        var selection = _state.RowSelection ?? new RowSelectionState();
+        var newItems = new Dictionary<string, bool>(selection.Items);
+
+        var rows = PrePaginationRowModel.Rows;
+        var actualStartIndex = Math.Max(0, Math.Min(startIndex, endIndex));
+        var actualEndIndex = Math.Min(rows.Count - 1, Math.Max(startIndex, endIndex));
+
+        for (int i = actualStartIndex; i <= actualEndIndex; i++)
+        {
+            if (i < rows.Count)
+            {
+                newItems[rows[i].Id] = true;
+            }
+        }
+
+        SetState(state => state with 
+        { 
+            RowSelection = new RowSelectionState(newItems)
+        });
+    }
+
+    public int GetSelectedRowCount()
+    {
+        var selection = _state.RowSelection;
+        if (selection == null) return 0;
+
+        return PrePaginationRowModel.Rows.Count(row => 
+            selection.Items.GetValueOrDefault(row.Id, false));
+    }
+
+    public int GetTotalRowCount()
+    {
+        return PrePaginationRowModel.Rows.Count;
+    }
+
+    public void ToggleAllColumnsVisible(bool? visible = null)
+    {
+        var currentVisibility = _state.ColumnVisibility ?? new ColumnVisibilityState();
+        var newVisibility = new Dictionary<string, bool>();
+
+        // If visible is null, toggle based on current state
+        bool targetVisibility;
+        if (visible.HasValue)
+        {
+            targetVisibility = visible.Value;
+        }
+        else
+        {
+            // Check if all columns are currently visible
+            var allVisible = AllLeafColumns.All(c => currentVisibility.Items.GetValueOrDefault(c.Id, true));
+            targetVisibility = !allVisible;
+        }
+
+        foreach (var column in AllLeafColumns)
+        {
+            newVisibility[column.Id] = targetVisibility;
+        }
+
+        SetState(state => state with 
+        { 
+            ColumnVisibility = new ColumnVisibilityState(newVisibility)
+        });
+    }
+
+    public void ToggleColumnVisibility(string columnId, bool? visible = null)
+    {
+        var currentVisibility = _state.ColumnVisibility ?? new ColumnVisibilityState();
+        var newVisibility = new Dictionary<string, bool>(currentVisibility.Items);
+
+        bool targetVisibility;
+        if (visible.HasValue)
+        {
+            targetVisibility = visible.Value;
+        }
+        else
+        {
+            var currentValue = currentVisibility.Items.GetValueOrDefault(columnId, true);
+            targetVisibility = !currentValue;
+        }
+
+        if (targetVisibility)
+        {
+            newVisibility.Remove(columnId); // Default is visible
+        }
+        else
+        {
+            newVisibility[columnId] = false;
+        }
+
+        SetState(state => state with 
+        { 
+            ColumnVisibility = newVisibility.Count > 0 ? new ColumnVisibilityState(newVisibility) : null
+        });
+    }
+
+    public void SetColumnVisibility(string columnId, bool visible)
+    {
+        ToggleColumnVisibility(columnId, visible);
+    }
+
+    public void SetColumnVisibility(ColumnVisibilityState visibilityState)
+    {
+        SetState(state => state with { ColumnVisibility = visibilityState });
+    }
+
+    public void SetColumnVisibility(Dictionary<string, bool> visibilityMap)
+    {
+        var visibilityState = new ColumnVisibilityState(visibilityMap);
+        SetColumnVisibility(visibilityState);
+    }
+
+    public bool GetColumnVisibility(string columnId)
+    {
+        var visibility = _state.ColumnVisibility;
+        return visibility?.Items.GetValueOrDefault(columnId, true) ?? true;
+    }
+
+    public int GetVisibleColumnCount()
+    {
+        return VisibleLeafColumns.Count;
+    }
+
+    public int GetTotalColumnCount()
+    {
+        return AllLeafColumns.Count;
+    }
+
+    public int GetHiddenColumnCount()
+    {
+        return GetTotalColumnCount() - GetVisibleColumnCount();
+    }
+
+    public Row<TData>? GetRowAtIndex(int index)
+    {
+        if (index < 0 || index >= RowModel.Rows.Count)
+            return null;
+        return RowModel.Rows[index];
+    }
+
+    // Virtualization support methods for tests
+    public IReadOnlyList<Row<TData>> GetVirtualRows()
+    {
+        return this.GetViewportRows();
+    }
+
+    public double GetEstimatedRowSize()
+    {
+        var viewport = this.GetViewport();
+        return viewport?.ItemHeight ?? 25.0;
+    }
+
+    public double GetEstimatedTotalSize()
+    {
+        var rowCount = RowModel.Rows.Count;
+        var estimatedRowSize = GetEstimatedRowSize();
+        return rowCount * estimatedRowSize;
+    }
+
+    public double ScrollToRow(int rowIndex)
+    {
+        var viewport = this.GetViewport();
+        if (viewport == null) 
+        {
+            // Initialize a default viewport if none exists
+            this.SetViewport(0, Math.Min(19, RowModel.Rows.Count - 1), 400, 25);
+            viewport = this.GetViewport()!;
+        }
+
+        var viewportSize = viewport.ViewportHeight / viewport.ItemHeight;
+        var startIndex = Math.Max(0, rowIndex - viewportSize / 2);
+        var endIndex = Math.Min(RowModel.Rows.Count - 1, startIndex + viewportSize - 1);
+
+        this.SetViewport(startIndex, endIndex, viewport.ViewportHeight, viewport.ItemHeight);
+        
+        // Return the scroll offset (estimated)
+        return rowIndex * viewport.ItemHeight;
+    }
+
+    private RowModel<TData> GetFilteredRowModel(RowModel<TData> sourceRowModel)
+    {
+        var globalFilter = State.GlobalFilter;
+        var columnFilters = State.ColumnFilters;
+
+        // If no filters are active, return the source model
+        if (globalFilter == null && (columnFilters == null || columnFilters.Filters.Count == 0))
+        {
+            return sourceRowModel;
+        }
+
+        var filteredRows = sourceRowModel.Rows.Where(row => 
+        {
+            // Apply global filter
+            if (globalFilter != null && !PassesGlobalFilter(row, globalFilter.Value))
+            {
+                return false;
+            }
+
+            // Apply column filters
+            if (columnFilters != null)
+            {
+                foreach (var filter in columnFilters.Filters)
+                {
+                    if (!PassesColumnFilter(row, filter))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }).ToList();
+
+        return new RowModel<TData>
+        {
+            Rows = filteredRows.AsReadOnly(),
+            FlatRows = filteredRows.AsReadOnly(),
+            RowsById = filteredRows.ToDictionary(r => r.Id, r => r).AsReadOnly()
+        };
+    }
+
+    private bool PassesGlobalFilter(Row<TData> row, object filterValue)
+    {
+        var filterText = filterValue?.ToString()?.ToLowerInvariant();
+        if (string.IsNullOrEmpty(filterText)) return true;
+
+        // Check all visible columns for the filter text
+        foreach (var column in VisibleLeafColumns)
+        {
+            var cell = row.GetCell(column.Id);
+            var cellValue = cell.Value?.ToString()?.ToLowerInvariant();
+            if (!string.IsNullOrEmpty(cellValue) && cellValue.Contains(filterText))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool PassesColumnFilter(Row<TData> row, ColumnFilter filter)
+    {
+        var column = GetColumn(filter.Id);
+        if (column == null) return true;
+
+        var cell = row.GetCell(filter.Id);
+        var cellValue = cell.Value;
+        var filterValue = filter.Value;
+
+        // Handle null values
+        if (filterValue == null) return true;
+        if (cellValue == null) return false;
+
+        // Handle different filter types based on value types
+        if (filterValue is string stringFilter)
+        {
+            var cellString = cellValue.ToString() ?? "";
+            
+            // For exact matches, use equality; for partial matches, use contains
+            // If the filter string is a complete word/value, do exact match
+            if (cellString.Equals(stringFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            
+            // Otherwise do contains match (case insensitive)
+            return cellString.Contains(stringFilter, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (filterValue is bool boolFilter)
+        {
+            return cellValue is bool cellBool && cellBool == boolFilter;
+        }
+
+        if (filterValue is int intFilter)
+        {
+            return cellValue is int cellInt && cellInt == intFilter;
+        }
+
+        if (filterValue is double doubleFilter)
+        {
+            return cellValue is double cellDouble && Math.Abs(cellDouble - doubleFilter) < 0.001;
+        }
+
+        // Default: convert both to strings and compare
+        return cellValue.ToString()?.Equals(filterValue.ToString(), StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private RowModel<TData> GetSortedRowModel(RowModel<TData> sourceRowModel)
+    {
+        var sorting = State.Sorting;
+        if (sorting == null || sorting.Columns.Count == 0)
+        {
+            return sourceRowModel;
+        }
+
+        var sortedRows = sourceRowModel.Rows.ToList();
+
+        // Sort by each column in order (stable sort)
+        for (int i = sorting.Columns.Count - 1; i >= 0; i--)
+        {
+            var sortColumn = sorting.Columns[i];
+            var column = GetColumn(sortColumn.Id);
+            if (column == null) continue;
+
+            sortedRows.Sort((row1, row2) =>
+            {
+                var cell1 = row1.GetCell(sortColumn.Id);
+                var cell2 = row2.GetCell(sortColumn.Id);
+                
+                var value1 = cell1.Value;
+                var value2 = cell2.Value;
+
+                // Handle null values (nulls go to end)
+                if (value1 == null && value2 == null) return 0;
+                if (value1 == null) return 1;
+                if (value2 == null) return -1;
+
+                int comparison = 0;
+
+                // Use IComparable if available
+                if (value1 is IComparable comparable1 && value2 is IComparable)
+                {
+                    comparison = comparable1.CompareTo(value2);
+                }
+                else
+                {
+                    // Fall back to string comparison
+                    comparison = string.Compare(value1.ToString(), value2.ToString(), StringComparison.Ordinal);
+                }
+
+                // Reverse for descending sort
+                if (sortColumn.Direction == SortDirection.Descending)
+                {
+                    comparison = -comparison;
+                }
+
+                return comparison;
+            });
+        }
+
+        return new RowModel<TData>
+        {
+            Rows = sortedRows.AsReadOnly(),
+            FlatRows = sortedRows.AsReadOnly(),
+            RowsById = sortedRows.ToDictionary(r => r.Id, r => r).AsReadOnly()
+        };
     }
 }
