@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reflection;
 
 namespace TanStack.Table.Core;
 
@@ -27,7 +28,7 @@ public class Table<TData> : ITable<TData>
     {
         Options = options;
         _state = options.State ?? new TableState<TData>();
-        
+
         InitializeColumns();
         InitializeFeatures();
         UpdateRowModel();
@@ -37,17 +38,17 @@ public class Table<TData> : ITable<TData>
     {
         var allColumns = new List<Column<TData>>();
         var leafColumns = new List<Column<TData>>();
-        
+
         BuildColumnTree(Options.Columns, null, 0, allColumns, leafColumns);
-        
+
         AllColumns = allColumns.AsReadOnly();
         AllLeafColumns = leafColumns.AsReadOnly();
-        
+
         foreach (var column in allColumns)
         {
             _columnMap[column.Id] = column;
         }
-        
+
         UpdateVisibleColumns();
         UpdateHeaderGroups();
     }
@@ -62,7 +63,7 @@ public class Table<TData> : ITable<TData>
         foreach (var columnDef in columnDefs)
         {
             Column<TData> column;
-            
+
             // 检测是否为泛型 ColumnDef<TData, TValue>
             var columnDefType = columnDef.GetType();
             if (columnDefType.IsGenericType &&
@@ -71,7 +72,7 @@ public class Table<TData> : ITable<TData>
                 // 通过反射创建对应的 Column<TData, TValue>
                 var valueType = columnDefType.GetGenericArguments()[1]; // TValue
                 var columnType = typeof(Column<,>).MakeGenericType(typeof(TData), valueType);
-                
+
                 try
                 {
                     column = (Column<TData>)Activator.CreateInstance(columnType, this, columnDef, parent, depth)!;
@@ -87,9 +88,9 @@ public class Table<TData> : ITable<TData>
                 // 非泛型或 GroupColumnDef<TData> 等，使用基础 Column<TData>
                 column = new Column<TData>(this, columnDef, parent, depth);
             }
-            
+
             allColumns.Add(column);
-            
+
             if (columnDef is GroupColumnDef<TData> groupDef)
             {
                 BuildColumnTree(groupDef.Columns, column, depth + 1, allColumns, leafColumns);
@@ -128,21 +129,21 @@ public class Table<TData> : ITable<TData>
     {
         var coreRowModel = GetCoreRowModel();
         PreFilteredRowModel = coreRowModel;
-        
+
         var filteredRowModel = Options.GetFilteredRowModel?.Invoke(this) ?? GetFilteredRowModel(coreRowModel);
         PreSortedRowModel = filteredRowModel;
-        
+
         var sortedRowModel = Options.GetSortedRowModel?.Invoke(this) ?? GetSortedRowModel(filteredRowModel);
         PreGroupedRowModel = sortedRowModel;
-        
+
         var groupedRowModel = Options.GetGroupedRowModel?.Invoke(this) ?? sortedRowModel;
         PreExpandedRowModel = groupedRowModel;
-        
+
         var expandedRowModel = Options.GetExpandedRowModel?.Invoke(this) ?? groupedRowModel;
         PrePaginationRowModel = expandedRowModel;
-        
+
         RowModel = Options.GetPaginationRowModel?.Invoke(this) ?? GetPaginatedRowModel(expandedRowModel);
-        
+
         UpdateRowMap();
     }
 
@@ -150,11 +151,11 @@ public class Table<TData> : ITable<TData>
     {
         if (Options.GetCoreRowModel != null)
             return Options.GetCoreRowModel(Options.Data.ToArray());
-            
+
         var rows = new List<Row<TData>>();
         var flatRows = new List<Row<TData>>();
         var rowsById = new Dictionary<string, Row<TData>>();
-        
+
         var index = 0;
         foreach (var data in Options.Data)
         {
@@ -164,7 +165,7 @@ public class Table<TData> : ITable<TData>
             rowsById[row.Id] = row;
             index++;
         }
-        
+
         return new RowModel<TData>
         {
             Rows = rows.AsReadOnly(),
@@ -181,9 +182,9 @@ public class Table<TData> : ITable<TData>
 
         var startIndex = pagination.PageIndex * pagination.PageSize;
         var endIndex = Math.Min(startIndex + pagination.PageSize, rowModel.Rows.Count);
-        
+
         var paginatedRows = new List<Row<TData>>();
-        
+
         for (int i = startIndex; i < endIndex; i++)
         {
             if (i < rowModel.Rows.Count)
@@ -223,9 +224,9 @@ public class Table<TData> : ITable<TData>
     {
         var headerGroups = new List<HeaderGroup<TData>>();
         var footerGroups = new List<HeaderGroup<TData>>();
-        
+
         var maxDepth = AllColumns.Any() ? AllColumns.Max(c => c.Depth) : 0;
-        
+
         for (int depth = 0; depth <= maxDepth; depth++)
         {
             var headers = AllColumns
@@ -233,14 +234,14 @@ public class Table<TData> : ITable<TData>
                 .Select(c => new Header<TData>(c, depth))
                 .Cast<Header<TData>>()
                 .ToList();
-                
+
             if (headers.Any())
             {
                 headerGroups.Add(new HeaderGroup<TData>($"headerGroup_{depth}", depth, headers));
                 footerGroups.Insert(0, new HeaderGroup<TData>($"footerGroup_{depth}", depth, headers));
             }
         }
-        
+
         HeaderGroups = headerGroups.AsReadOnly();
         FooterGroups = footerGroups.AsReadOnly();
     }
@@ -249,20 +250,20 @@ public class Table<TData> : ITable<TData>
     {
         var oldState = _state;
         _state = state;
-        
+
         Options.OnStateChange?.Invoke(state);
-        
+
         foreach (var feature in _features)
         {
             feature.OnStateChange(this, state);
         }
-        
+
         if (!ReferenceEquals(oldState.ColumnVisibility, state.ColumnVisibility))
         {
             UpdateVisibleColumns();
             UpdateHeaderGroups();
         }
-        
+
         UpdateRowModel();
     }
 
@@ -344,8 +345,8 @@ public class Table<TData> : ITable<TData>
     public void SetSorting(IEnumerable<ColumnSort> sorts)
     {
         var sortList = sorts.ToList();
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             Sorting = sortList.Count > 0 ? new SortingState(sortList) : null
         });
     }
@@ -374,7 +375,7 @@ public class Table<TData> : ITable<TData>
     {
         var currentSorting = State.Sorting?.Columns ?? new List<ColumnSort>();
         var existingSort = currentSorting.FirstOrDefault(s => s.Id == columnId);
-        
+
         if (existingSort == null)
         {
             AddSort(columnId, SortDirection.Ascending);
@@ -420,8 +421,8 @@ public class Table<TData> : ITable<TData>
         var pagination = _state.Pagination;
         if (pagination == null || !GetCanNextPage()) return;
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             Pagination = pagination with { PageIndex = pagination.PageIndex + 1 }
         });
     }
@@ -431,8 +432,8 @@ public class Table<TData> : ITable<TData>
         var pagination = _state.Pagination;
         if (pagination == null || !GetCanPreviousPage()) return;
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             Pagination = pagination with { PageIndex = pagination.PageIndex - 1 }
         });
     }
@@ -442,8 +443,8 @@ public class Table<TData> : ITable<TData>
         var pagination = _state.Pagination;
         if (pagination == null) return;
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             Pagination = pagination with { PageIndex = 0 }
         });
     }
@@ -454,8 +455,8 @@ public class Table<TData> : ITable<TData>
         if (pagination == null) return;
 
         var lastPageIndex = Math.Max(0, GetPageCount() - 1);
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             Pagination = pagination with { PageIndex = lastPageIndex }
         });
     }
@@ -466,8 +467,8 @@ public class Table<TData> : ITable<TData>
         var maxPageIndex = Math.Max(0, GetPageCount() - 1);
         var clampedPageIndex = Math.Max(0, Math.Min(pageIndex, maxPageIndex));
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             Pagination = pagination with { PageIndex = clampedPageIndex }
         });
     }
@@ -477,8 +478,8 @@ public class Table<TData> : ITable<TData>
         var pagination = _state.Pagination ?? new PaginationState();
         var normalizedPageSize = Math.Max(1, pageSize);
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             Pagination = pagination with { PageSize = normalizedPageSize }
         });
     }
@@ -489,7 +490,7 @@ public class Table<TData> : ITable<TData>
         if (selection == null) return false;
 
         var totalRows = PrePaginationRowModel.Rows;
-        return totalRows.Count > 0 && totalRows.All(row => 
+        return totalRows.Count > 0 && totalRows.All(row =>
             selection.Items.GetValueOrDefault(row.Id, false));
     }
 
@@ -498,7 +499,7 @@ public class Table<TData> : ITable<TData>
         var selection = _state.RowSelection;
         if (selection == null) return false;
 
-        return PrePaginationRowModel.Rows.Any(row => 
+        return PrePaginationRowModel.Rows.Any(row =>
             selection.Items.GetValueOrDefault(row.Id, false));
     }
 
@@ -512,8 +513,8 @@ public class Table<TData> : ITable<TData>
             newItems[row.Id] = true;
         }
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             RowSelection = new RowSelectionState(newItems)
         });
     }
@@ -549,8 +550,8 @@ public class Table<TData> : ITable<TData>
             newItems.Remove(rowId);
         }
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             RowSelection = newItems.Count > 0 ? new RowSelectionState(newItems) : null
         });
     }
@@ -572,8 +573,8 @@ public class Table<TData> : ITable<TData>
             }
         }
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             RowSelection = new RowSelectionState(newItems)
         });
     }
@@ -583,7 +584,7 @@ public class Table<TData> : ITable<TData>
         var selection = _state.RowSelection;
         if (selection == null) return 0;
 
-        return PrePaginationRowModel.Rows.Count(row => 
+        return PrePaginationRowModel.Rows.Count(row =>
             selection.Items.GetValueOrDefault(row.Id, false));
     }
 
@@ -615,8 +616,8 @@ public class Table<TData> : ITable<TData>
             newVisibility[column.Id] = targetVisibility;
         }
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             ColumnVisibility = new ColumnVisibilityState(newVisibility)
         });
     }
@@ -646,8 +647,8 @@ public class Table<TData> : ITable<TData>
             newVisibility[columnId] = false;
         }
 
-        SetState(state => state with 
-        { 
+        SetState(state => state with
+        {
             ColumnVisibility = newVisibility.Count > 0 ? new ColumnVisibilityState(newVisibility) : null
         });
     }
@@ -718,7 +719,7 @@ public class Table<TData> : ITable<TData>
     public double ScrollToRow(int rowIndex)
     {
         var viewport = this.GetViewport();
-        if (viewport == null) 
+        if (viewport == null)
         {
             // Initialize a default viewport if none exists
             this.SetViewport(0, Math.Min(19, RowModel.Rows.Count - 1), 400, 25);
@@ -730,7 +731,7 @@ public class Table<TData> : ITable<TData>
         var endIndex = Math.Min(RowModel.Rows.Count - 1, startIndex + viewportSize - 1);
 
         this.SetViewport(startIndex, endIndex, viewport.ViewportHeight, viewport.ItemHeight);
-        
+
         // Return the scroll offset (estimated)
         return rowIndex * viewport.ItemHeight;
     }
@@ -748,7 +749,7 @@ public class Table<TData> : ITable<TData>
 
         Console.WriteLine($"DEBUG Filter: global={(globalFilter?.Value?.ToString() ?? "<none>")}, columnFilters={(columnFilters?.Filters.Count ?? 0)}");
 
-        var filteredRows = sourceRowModel.Rows.Where(row => 
+        var filteredRows = sourceRowModel.Rows.Where(row =>
         {
             // Apply global filter
             if (globalFilter != null && !PassesGlobalFilter(row, globalFilter.Value))

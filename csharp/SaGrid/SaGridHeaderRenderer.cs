@@ -6,6 +6,7 @@ using TanStack.Table.Core;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Xaml.Interactions.Custom;
 
 namespace SaGrid;
 
@@ -102,7 +103,7 @@ internal class SaGridHeaderRenderer<TData>
             // with modifier and multi-sort enabled = append/switch/remove in chain.
             void ApplySorting(bool multi)
             {
-              if (multi)
+              if (multi && saGrid.IsMultiSortEnabled())
               {
                 var currentDir = column.SortDirection;
                 var current = saGrid.State.Sorting?.Columns ?? new List<ColumnSort>();
@@ -155,43 +156,47 @@ internal class SaGridHeaderRenderer<TData>
               }
             }
 
-            bool IsMulti(KeyModifiers mods)
+            // Behaviors equivalent to XAML ButtonClickEventTriggerBehavior with KeyModifiers
+            // Control => multi-sort toggle
+            // Shift => reset sorting
+            // Control+Shift => multi-sort toggle
+            // Command (Meta) => multi-sort toggle (macOS)
+            // Option (Alt) => multi-sort toggle
             {
-              var multiRequested = mods.HasFlag(KeyModifiers.Shift) ||
-                                   mods.HasFlag(KeyModifiers.Control) ||
-                                   mods.HasFlag(KeyModifiers.Meta) ||
-                                   mods.HasFlag(KeyModifiers.Alt);
-              return (saGrid is SaGrid<TData> g && g.IsMultiSortEnabled()) && multiRequested;
-            }
-
-
-            // FIXME: this isn't working - PointerPressed on Button doesn't fire
-            // Handle modifier-based multi-sort on PointerPressed only; leave plain click to Button.Click
-            var consumedByMulti = false;
-
-            void OnPointerPressed(object? sender, PointerPressedEventArgs e)
-            {
-              if (IsMulti(e.KeyModifiers))
+              var ctrlBehavior = new SaGrid.Behaviors.ButtonClickEventTriggerBehavior
               {
-                ApplySorting(true);
-                e.Handled = true;
-                consumedByMulti = true; // prevent Click from running single-sort
-              }
-            }
+                RequiredModifiers = KeyModifiers.Control,
+                Action = () => ApplySorting(true)
+              };
+              ctrlBehavior.Attach(button);
 
-            button.PointerPressed += OnPointerPressed;
+              var shiftBehavior = new SaGrid.Behaviors.ButtonClickEventTriggerBehavior
+              {
+                RequiredModifiers = KeyModifiers.Shift,
+                Action = () => ApplySorting(true)
+              };
+              shiftBehavior.Attach(button);
+
+              var commandBehavior = new SaGrid.Behaviors.ButtonClickEventTriggerBehavior
+              {
+                RequiredModifiers = KeyModifiers.Meta,
+                Action = () => ApplySorting(true)
+              };
+              commandBehavior.Attach(button);
+
+              var optionBehavior = new SaGrid.Behaviors.ButtonClickEventTriggerBehavior
+              {
+                RequiredModifiers = KeyModifiers.Alt,
+                Action = () => ApplySorting(true)
+              };
+              optionBehavior.Attach(button);
+            }
 
             // Plain click toggles single-sort (replace others)
             button.Click += (s, e) =>
             {
-              if (consumedByMulti)
-              {
-                // This Click is from a handled multi action; suppress
-                consumedByMulti = false;
-                return;
-              }
-
-              ApplySorting(saGrid is SaGrid<TData> g && g.IsMultiSortEnabled());
+              // Always single-sort on plain click; modifier-specific actions are handled by behaviors
+              ApplySorting(false);
             };
 
             // Make the entire cell clickable
