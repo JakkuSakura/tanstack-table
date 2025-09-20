@@ -5,7 +5,7 @@ using Avalonia.Markup.Declarative;
 using TanStack.Table.Core;
 using Avalonia;
 using Avalonia.Input;
-using Avalonia.Input;
+using Avalonia.Interactivity;
 
 namespace SaGrid;
 
@@ -20,7 +20,7 @@ internal class SaGridHeaderRenderer<TData>
     public Control CreateHeader(SaGrid<TData> saGrid, Func<SaGrid<TData>>? gridSignalGetter = null, Func<int>? selectionSignalGetter = null)
     {
         var headerControls = new List<Control>();
-        
+
         // Add header title rows with sortable headers
         headerControls.AddRange(saGrid.HeaderGroups.Select(headerGroup =>
             new StackPanel()
@@ -95,68 +95,96 @@ internal class SaGridHeaderRenderer<TData>
 
                         button.Content = label;
 
-                        // Handle sorting on pointer press at the border level so the whole cell is clickable
-                        // TanStack behavior: modifiers append/remove, plain toggles single sort
-                        void HandlePress(KeyModifiers mods)
+                        // Unified sorting handler: plain click = single-sort cycle (replace others);
+                        // with modifier and multi-sort enabled = append/switch/remove in chain.
+                        void ApplySorting(bool multi)
                         {
-                            var multiRequested = mods.HasFlag(KeyModifiers.Shift) ||
-                                                 mods.HasFlag(KeyModifiers.Control) ||
-                                                 mods.HasFlag(KeyModifiers.Meta);
-
-                            var isMulti = saGrid is SaGrid<TData> g && g.IsMultiSortEnabled();
-                            if (multiRequested && isMulti)
+                            if (multi)
                             {
-                                // Append/remove this column in the multi-sort chain (and trigger UI update)
                                 var currentDir = column.SortDirection;
+                                var current = saGrid.State.Sorting?.Columns ?? new List<ColumnSort>();
+
                                 if (currentDir == null)
                                 {
-                                    var current = saGrid.State.Sorting?.Columns ?? new List<ColumnSort>();
-                                    var newList = current.Where(s => s.Id != column.Id).ToList();
+                                    var newList = current.ToList();
                                     newList.Add(new ColumnSort(column.Id, SortDirection.Ascending));
                                     saGrid.SetSorting(newList);
                                 }
                                 else if (currentDir == SortDirection.Ascending)
                                 {
-                                    var current = saGrid.State.Sorting?.Columns ?? new List<ColumnSort>();
-                                    var newList = current.Where(s => s.Id != column.Id).ToList();
-                                    newList.Add(new ColumnSort(column.Id, SortDirection.Descending));
+                                    // Replace in-place to preserve index
+                                    var newList = current.ToList();
+                                    var idx = newList.FindIndex(s => s.Id == column.Id);
+                                    if (idx >= 0)
+                                    {
+                                        newList[idx] = new ColumnSort(column.Id, SortDirection.Descending);
+                                    }
+                                    else
+                                    {
+                                        newList.Add(new ColumnSort(column.Id, SortDirection.Descending));
+                                    }
                                     saGrid.SetSorting(newList);
                                 }
                                 else
                                 {
-                                    var current = saGrid.State.Sorting?.Columns ?? new List<ColumnSort>();
+                                    // Remove this column from sorting, preserve others' order
                                     var newList = current.Where(s => s.Id != column.Id).ToList();
                                     saGrid.SetSorting(newList);
                                 }
-                                return;
-                            }
-
-                            // Plain click path: single-sort (replace others) and cycle
-                            var dir = column.SortDirection;
-                            if (dir == null)
-                            {
-                                saGrid.SetSorting(new[] { new ColumnSort(column.Id, SortDirection.Ascending) });
-                            }
-                            else if (dir == SortDirection.Ascending)
-                            {
-                                saGrid.SetSorting(new[] { new ColumnSort(column.Id, SortDirection.Descending) });
                             }
                             else
                             {
-                                saGrid.SetSorting(Array.Empty<ColumnSort>());
+                                // Single-sort cycle: toggle this column and clear all others
+                                var dir = column.SortDirection;
+                                if (dir == null)
+                                {
+                                    saGrid.SetSorting(new[] { new ColumnSort(column.Id, SortDirection.Ascending) });
+                                }
+                                else if (dir == SortDirection.Ascending)
+                                {
+                                    saGrid.SetSorting(new[] { new ColumnSort(column.Id, SortDirection.Descending) });
+                                }
+                                else
+                                {
+                                    saGrid.SetSorting(Array.Empty<ColumnSort>());
+                                }
                             }
                         }
 
-                        border.PointerPressed += (s, e) =>
+                        bool IsMulti(KeyModifiers mods)
                         {
-                            HandlePress(e.KeyModifiers);
-                            e.Handled = true;
-                        };
+                            var multiRequested = mods.HasFlag(KeyModifiers.Shift) ||
+                                                 mods.HasFlag(KeyModifiers.Control) ||
+                                                 mods.HasFlag(KeyModifiers.Meta) ||
+                                                 mods.HasFlag(KeyModifiers.Alt);
+                            return (saGrid is SaGrid<TData> g && g.IsMultiSortEnabled()) && multiRequested;
+                        }
 
-                        // Also attach Click for accessibility and platforms that don't pass modifiers on press
+                        // Handle modifier-based multi-sort on PointerPressed only; leave plain click to Button.Click
+                        var consumedByMulti = false;
+                        void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+                        {
+                            if (IsMulti(e.KeyModifiers))
+                            {
+                                ApplySorting(true);
+                                e.Handled = true;
+                                consumedByMulti = true; // prevent Click from running single-sort
+                            }
+                        }
+
+                        border.PointerPressed += OnPointerPressed;
+                        button.PointerPressed += OnPointerPressed;
+
+                        // Plain click toggles single-sort (replace others)
                         button.Click += (s, e) =>
                         {
-                            HandlePress(KeyModifiers.None);
+                            if (consumedByMulti)
+                            {
+                                // This Click is from a handled multi action; suppress
+                                consumedByMulti = false;
+                                return;
+                            }
+                            ApplySorting(false);
                         };
 
                         // Make the entire cell clickable
@@ -166,7 +194,7 @@ internal class SaGridHeaderRenderer<TData>
                     }).ToArray()
                 )
         ));
-        
+
         // Add filter row if column filtering is enabled
         if (saGrid.Options.EnableColumnFilters)
         {
@@ -178,7 +206,7 @@ internal class SaGridHeaderRenderer<TData>
         {
             Console.WriteLine("Column filtering is disabled - no filter row will be added");
         }
-        
+
         return new StackPanel()
             .Orientation(Orientation.Vertical)
             .Children(headerControls.ToArray());
@@ -187,7 +215,7 @@ internal class SaGridHeaderRenderer<TData>
     private Control CreateFilterRow(SaGrid<TData> saGrid)
     {
         Console.WriteLine($"Creating filter row with {saGrid.VisibleLeafColumns.Count} columns");
-        
+
         var filterControls = saGrid.VisibleLeafColumns.Select(column =>
         {
             Console.WriteLine($"Creating filter for column: {column.Id}");
@@ -216,7 +244,7 @@ internal class SaGridHeaderRenderer<TData>
     private Control CreateFilterTextBox(SaGrid<TData> saGrid, Column<TData> column)
     {
         Console.WriteLine($"Creating TextBox for column {column.Id}");
-        
+
         var textBox = new TextBox
         {
             Watermark = $"Filter {column.Id}...",
@@ -236,7 +264,7 @@ internal class SaGridHeaderRenderer<TData>
         // Ensure the TextBox can receive input immediately
         textBox.TabIndex = 0;
         textBox.IsTabStop = true;
-        
+
         Console.WriteLine($"TextBox created for {column.Id} - Focusable: {textBox.Focusable}, IsEnabled: {textBox.IsEnabled}");
 
         // Add multiple event handlers to debug what's happening
