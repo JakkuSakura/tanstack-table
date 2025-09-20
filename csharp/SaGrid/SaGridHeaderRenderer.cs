@@ -4,6 +4,8 @@ using Avalonia.Media;
 using Avalonia.Markup.Declarative;
 using TanStack.Table.Core;
 using Avalonia;
+using Avalonia.Input;
+using Avalonia.Input;
 
 namespace SaGrid;
 
@@ -15,30 +17,121 @@ internal class SaGridHeaderRenderer<TData>
     {
         _onFilterFocus = onFilterFocus;
     }
-    public Control CreateHeader(SaGrid<TData> saGrid)
+    public Control CreateHeader(SaGrid<TData> saGrid, Func<SaGrid<TData>>? gridSignalGetter = null, Func<int>? selectionSignalGetter = null)
     {
         var headerControls = new List<Control>();
         
-        // Add header title rows
+        // Add header title rows with sortable headers
         headerControls.AddRange(saGrid.HeaderGroups.Select(headerGroup =>
             new StackPanel()
                 .Orientation(Orientation.Horizontal)
                 .Children(
                     headerGroup.Headers.Select(header =>
-                        new Border()
+                    {
+                        var column = (Column<TData>)header.Column;
+                        var border = new Border()
                             .BorderThickness(0, 0, 1, 1)
                             .BorderBrush(Brushes.LightGray)
                             .Background(Brushes.LightBlue)
+                            .Padding(new Thickness(0))
                             .Width(header.Size)
                             .Height(40)
-                            .Child(
-                                new TextBlock()
-                                    .Text(SaGridContentHelper<TData>.GetHeaderContent(header))
-                                    .VerticalAlignment(VerticalAlignment.Center)
-                                    .HorizontalAlignment(HorizontalAlignment.Center)
-                                    .FontWeight(FontWeight.Bold)
-                            )
-                    ).ToArray()
+                            .HorizontalAlignment(HorizontalAlignment.Stretch)
+                            .VerticalAlignment(VerticalAlignment.Stretch);
+
+                        // Use a Button for reliable click handling and accessibility
+                        var button = new Button
+                        {
+                            Background = Brushes.Transparent,
+                            BorderBrush = null,
+                            BorderThickness = new Thickness(0),
+                            Padding = new Thickness(0),
+                            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                            VerticalContentAlignment = VerticalAlignment.Stretch,
+                            Focusable = false,
+                            IsTabStop = false,
+                            HorizontalAlignment = HorizontalAlignment.Stretch,
+                            VerticalAlignment = VerticalAlignment.Stretch,
+                            Cursor = new Cursor(StandardCursorType.Hand)
+                        };
+
+                        // Reactive header label with sort indicators
+                        var label = SolidAvalonia.Solid.Reactive(() =>
+                        {
+                            var _ = gridSignalGetter?.Invoke();
+                            var __ = selectionSignalGetter?.Invoke();
+                            var title = SaGridContentHelper<TData>.GetHeaderContent(header);
+                            string sortSuffix = "";
+                            if (column.SortDirection != null)
+                            {
+                                var arrow = column.SortDirection == TanStack.Table.Core.SortDirection.Ascending ? "▲" : "▼";
+                                var index = column.SortIndex.HasValue ? $" {column.SortIndex.Value + 1}" : "";
+                                sortSuffix = $" {arrow}{index}";
+                            }
+                            var container = new Grid
+                            {
+                                HorizontalAlignment = HorizontalAlignment.Stretch,
+                                VerticalAlignment = VerticalAlignment.Stretch
+                            };
+                            var centeredTitle = new TextBlock()
+                                .Text(title)
+                                .HorizontalAlignment(HorizontalAlignment.Center)
+                                .VerticalAlignment(VerticalAlignment.Center)
+                                .TextAlignment(TextAlignment.Center)
+                                .FontWeight(FontWeight.Bold);
+                            var rightIndicator = new TextBlock()
+                                .Text(sortSuffix)
+                                .HorizontalAlignment(HorizontalAlignment.Right)
+                                .VerticalAlignment(VerticalAlignment.Center)
+                                .Margin(new Thickness(8, 0, 8, 0));
+                            container.Children.Add(centeredTitle);
+                            container.Children.Add(rightIndicator);
+                            return container;
+                        });
+
+                        button.Content = label;
+
+                        // Handle modifiers for multi-sort at PointerPressed to capture KeyModifiers
+                        button.PointerPressed += (s, e) =>
+                        {
+                            var mods = e.KeyModifiers;
+                            var multiRequested = mods.HasFlag(KeyModifiers.Shift) ||
+                                                 mods.HasFlag(KeyModifiers.Control) ||
+                                                 mods.HasFlag(KeyModifiers.Meta);
+
+                            if (multiRequested && saGrid.Options.EnableMultiSort)
+                            {
+                                // Append/remove this column in the multi-sort chain
+                                column.ToggleSorting();
+                                e.Handled = true;
+                                return;
+                            }
+                            // Otherwise, single-sort cycle below (handled on Click)
+                        };
+
+                        button.Click += (s, e) =>
+                        {
+                            // Single-sort: replace others and cycle Asc -> Desc -> None
+                            var currentDir = column.SortDirection;
+                            if (currentDir == null)
+                            {
+                                saGrid.SetSorting(new[] { new ColumnSort(column.Id, SortDirection.Ascending) });
+                            }
+                            else if (currentDir == SortDirection.Ascending)
+                            {
+                                saGrid.SetSorting(new[] { new ColumnSort(column.Id, SortDirection.Descending) });
+                            }
+                            else
+                            {
+                                saGrid.SetSorting(Array.Empty<ColumnSort>());
+                            }
+                        };
+
+                        // Make the entire cell clickable
+                        border.Child(button);
+
+                        return border;
+                    }).ToArray()
                 )
         ));
         

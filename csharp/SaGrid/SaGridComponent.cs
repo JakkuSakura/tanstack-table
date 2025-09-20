@@ -74,7 +74,7 @@ public class SaGridComponent<TData> : Component
                 RowDefinitions = new RowDefinitions("Auto,*,Auto")
             };
 
-            _headerControl = _headerRenderer.CreateHeader(_saGrid);
+            _headerControl = _headerRenderer.CreateHeader(_saGrid, () => Grid, _selectionSignal?.Item1);
             if (_headerControl is Control hdrCtrl)
             {
                 hdrCtrl.SetValue(Panel.ZIndexProperty, 1);

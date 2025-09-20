@@ -303,6 +303,19 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _cellRenderer = renderer;
     }
 
+    // Sorting wrappers to trigger UI updates
+    public new void SetSorting(IEnumerable<ColumnSort> sorts)
+    {
+        base.SetSorting(sorts);
+        ScheduleUIUpdate();
+    }
+
+    public new void ToggleSort(string columnId)
+    {
+        base.ToggleSort(columnId);
+        ScheduleUIUpdate();
+    }
+
     public string RenderCell(Row<TData> row, string columnId)
     {
         if (_cellRenderer != null)
