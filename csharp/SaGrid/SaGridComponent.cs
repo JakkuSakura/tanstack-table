@@ -48,7 +48,7 @@ public class SaGridComponent<TData> : Component
     {
         Console.WriteLine("SaGridComponent.Build invoked");
         
-        // Initialize signals and hook SaGrid UI update callback once
+        // Initialize reactive signals and wire SaGrid to trigger them
         if (_gridSignal == null)
         {
             _gridSignal = CreateSignal(_saGrid);
@@ -56,13 +56,13 @@ public class SaGridComponent<TData> : Component
 
             var (gridGetter, gridSetter) = _gridSignal.Value;
             var (selectionGetter, selectionSetter) = _selectionSignal.Value;
-            var updateCounter = 0;
+            var counter = 0;
 
             _saGrid.SetUIUpdateCallback(() =>
             {
-                updateCounter++;
+                counter++;
                 gridSetter?.Invoke(_saGrid);
-                selectionSetter?.Invoke(updateCounter);
+                selectionSetter?.Invoke(counter);
             });
         }
 
@@ -98,34 +98,23 @@ public class SaGridComponent<TData> : Component
                 .BorderThickness(1)
                 .BorderBrush(Brushes.Gray)
                 .Child(_rootGrid);
-        }
 
-        return Reactive(() =>
-        {
-            var currentGrid = Grid; // Access reactive grid signal
-            // Also depend on the selection/update signal so any grid state
-            // change (filters, pagination, etc.) re-renders the body/footer
-            var renderCounter = _selectionSignal?.Item1();
-
-            // Update body and footer content in-place to keep header focus stable
-            var body = _bodyRenderer.CreateBody(currentGrid, () => Grid, _selectionSignal?.Item1);
-            if (_bodyHost != null) _bodyHost.Content = body;
-
-            var footer = _footerRenderer.CreateFooter(currentGrid);
-            if (_footerHost != null) _footerHost.Content = footer;
-
-            // Restore focus if a TextBox in header had focus
-            if (_lastFocusedTextBox != null && _lastFocusedTextBox.IsVisible)
+            // Initialize reactive body/footer content once so inner reactive cells have an owner
+            _bodyHost.Content = Reactive(() =>
             {
-                // Re-focus the same control instance; header is stable so this works
-                _lastFocusedTextBox.Focus();
-            }
+                // Access signals to create reactive dependency
+                var currentGrid = Grid; // uses _gridSignal
+                var selTick = _selectionSignal?.Item1();
+                return _bodyRenderer.CreateBody(currentGrid, () => Grid, _selectionSignal?.Item1);
+            });
 
-            // Note: Keyboard navigation remains disabled here to prioritize typing in filter inputs
-
-            // Do not force focus on pointer press; let child controls manage focus naturally
-
-            return _rootBorder!;
-        });
+            _footerHost.Content = Reactive(() =>
+            {
+                var currentGrid = Grid;
+                var selTick = _selectionSignal?.Item1();
+                return _footerRenderer.CreateFooter(currentGrid);
+            });
+        }
+        return _rootBorder!;
     }
 }
