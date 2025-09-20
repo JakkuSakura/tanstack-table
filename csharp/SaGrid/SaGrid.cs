@@ -123,28 +123,28 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     }
 
     // Advanced column operations
-    public void SetColumnVisibility(string columnId, bool visible)
+    public new void SetColumnVisibility(string columnId, bool visible)
     {
         this.ToggleColumnVisibility(columnId, visible); // Use extension method from base
     }
 
-    public bool GetColumnVisibility(string columnId)
+    public new bool GetColumnVisibility(string columnId)
     {
         var visibility = State.ColumnVisibility;
         return visibility?.Items.GetValueOrDefault(columnId, true) ?? true;
     }
 
-    public int GetVisibleColumnCount()
+    public new int GetVisibleColumnCount()
     {
         return VisibleLeafColumns.Count;
     }
 
-    public int GetTotalColumnCount()
+    public new int GetTotalColumnCount()
     {
         return AllLeafColumns.Count;
     }
 
-    public int GetHiddenColumnCount()
+    public new int GetHiddenColumnCount()
     {
         return GetTotalColumnCount() - GetVisibleColumnCount();
     }

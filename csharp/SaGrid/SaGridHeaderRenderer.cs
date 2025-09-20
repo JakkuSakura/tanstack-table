@@ -71,9 +71,15 @@ internal class SaGridHeaderRenderer<TData>
                 .Child(textBox);
         }).ToArray();
 
-        return new StackPanel()
-            .Orientation(Orientation.Horizontal)
-            .Children(filterControls);
+        // Put filter row inside a Border with a visible bottom line to suggest input area
+        return new Border()
+            .BorderThickness(new Thickness(0,0,0,1))
+            .BorderBrush(Brushes.LightGray)
+            .Child(
+                new StackPanel()
+                    .Orientation(Orientation.Horizontal)
+                    .Children(filterControls)
+            );
     }
 
     private Control CreateFilterTextBox(SaGrid<TData> saGrid, Column<TData> column)
@@ -92,6 +98,13 @@ internal class SaGridHeaderRenderer<TData>
             AcceptsReturn = false,
             AcceptsTab = false
         };
+        textBox.Margin = new Thickness(4, 4, 4, 4);
+        textBox.BorderThickness = new Thickness(1);
+        textBox.BorderBrush = Brushes.Gray;
+        textBox.Background = Brushes.White;
+        // Ensure the TextBox can receive input immediately
+        textBox.TabIndex = 0;
+        textBox.IsTabStop = true;
         
         Console.WriteLine($"TextBox created for {column.Id} - Focusable: {textBox.Focusable}, IsEnabled: {textBox.IsEnabled}");
 
@@ -109,8 +122,9 @@ internal class SaGridHeaderRenderer<TData>
         textBox.PointerPressed += (sender, args) =>
         {
             Console.WriteLine($"TextBox for column {column.Id} pointer pressed");
-            args.Handled = false; // Allow event to bubble up normally
-            textBox.Focus();
+            // Do not mark handled here; let TextBox process the event normally
+            // The grid container no longer steals focus on pointer presses.
+            args.Handled = false;
         };
 
         textBox.PointerEntered += (sender, args) =>
@@ -120,6 +134,7 @@ internal class SaGridHeaderRenderer<TData>
 
         textBox.KeyDown += (sender, args) =>
         {
+            // Let TextBox handle keys normally; grid ignores keys from TextBox
             Console.WriteLine($"TextBox for column {column.Id} key down: {args.Key}");
         };
 

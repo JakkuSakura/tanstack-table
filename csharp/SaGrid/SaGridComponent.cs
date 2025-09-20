@@ -6,6 +6,9 @@ using SolidAvalonia;
 using TanStack.Table.Core;
 using static SolidAvalonia.Solid;
 using Avalonia;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
 
 namespace SaGrid;
 
@@ -13,7 +16,7 @@ public class SaGridComponent<TData> : Component
 {
     private readonly SaGrid<TData> _saGrid;
     private (Func<SaGrid<TData>>, Action<SaGrid<TData>>)? _gridSignal;
-    private (Func<int>, Action<int>)? _selectionSignal;
+    private int _updateCounter = 0;
 
     // Renderers
     private readonly SaGridHeaderRenderer<TData> _headerRenderer;
@@ -39,103 +42,64 @@ public class SaGridComponent<TData> : Component
     {
         Console.WriteLine("SaGridComponent.Build invoked");
         
-        // Initialize signals
+        // Initialize signal once for potential external reactivity (not used to rebuild root)
         if (_gridSignal == null)
         {
             _gridSignal = CreateSignal(_saGrid);
-            _selectionSignal = CreateSignal(0); // Signal for cell selection count
-
-            var (gridGetter, gridSetter) = _gridSignal.Value;
-            var (selectionGetter, selectionSetter) = _selectionSignal.Value;
-            var updateCounter = 0;
-
-            // Set up UI update callback for SaGrid
-            _saGrid.SetUIUpdateCallback(() =>
-            {
-                updateCounter++;
-                gridSetter?.Invoke(_saGrid);
-                selectionSetter?.Invoke(updateCounter); // Use counter to force change
-            });
         }
 
-        return Reactive(() =>
+        // Create stable header once to preserve TextBox focus and content
+        var stableHeader = _headerRenderer.CreateHeader(_saGrid);
+        // Make header clearly on top and hit-testable
+        if (stableHeader is Control hdrCtrl)
         {
-            var currentGrid = Grid; // Access the reactive signal for grid updates
-
-            var mainBorder = new Border()
-                .BorderThickness(1)
-                .BorderBrush(Brushes.Gray)
-                .Child(
-                    new StackPanel()
-                        .Children(
-                            // Header (reactive to ensure TextBox events work)
-                            _headerRenderer.CreateHeader(currentGrid),
-                            // Body (reactive, updates with grid changes)
-                            _bodyRenderer.CreateBody(currentGrid, () => Grid, _selectionSignal?.Item1),
-                            // Footer (reactive)
-                            _footerRenderer.CreateFooter(currentGrid)
-                        )
-                );
-
-            // Add keyboard navigation for cell selection
-            mainBorder.KeyDown += (sender, e) =>
+            hdrCtrl.SetValue(Panel.ZIndexProperty, 1);
+            if (hdrCtrl is Panel hdrPanel)
             {
-                try
-                {
-                    var direction = e.Key switch
-                    {
-                        Avalonia.Input.Key.Up => SaGrid<TData>.CellNavigationDirection.Up,
-                        Avalonia.Input.Key.Down => SaGrid<TData>.CellNavigationDirection.Down,
-                        Avalonia.Input.Key.Left => SaGrid<TData>.CellNavigationDirection.Left,
-                        Avalonia.Input.Key.Right => SaGrid<TData>.CellNavigationDirection.Right,
-                        _ => (SaGrid<TData>.CellNavigationDirection?)null
-                    };
+                hdrPanel.Background = Brushes.White;
+            }
+        }
 
-                    if (direction.HasValue)
-                    {
-                        Console.WriteLine($"Keyboard navigation: {direction.Value}");
-                        currentGrid.NavigateCell(direction.Value);
-                        e.Handled = true;
-                    }
-                    else if (e.Key == Avalonia.Input.Key.C && e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control))
-                    {
-                        // Ctrl+C to copy selected cells
-                        var copiedText = currentGrid.CopySelectedCells();
-                        if (!string.IsNullOrEmpty(copiedText))
-                        {
-                            Console.WriteLine($"Copied to clipboard:\n{copiedText}");
-                        }
-                        e.Handled = true;
-                    }
-                    else if (e.Key == Avalonia.Input.Key.Escape)
-                    {
-                        // Escape to clear selection
-                        currentGrid.ClearCellSelection();
-                        e.Handled = true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error handling keyboard navigation: {ex.Message}");
-                }
-            };
+        // Hosts for reactive parts
+        var bodyHost = new ContentControl();
+        var footerHost = new ContentControl();
 
-            // Focus the border when clicked to enable keyboard navigation, but not if clicking on a TextBox
-            mainBorder.PointerPressed += (sender, e) =>
+        // Initial content
+        bodyHost.Content = _bodyRenderer.CreateBody(_saGrid, () => _saGrid, () => _updateCounter);
+        footerHost.Content = _footerRenderer.CreateFooter(_saGrid);
+
+        // Root container (stable) with proper layout to avoid overlaps
+        var grid = new Grid();
+        grid.RowDefinitions = new RowDefinitions("Auto,*,Auto");
+
+        // Place controls in rows
+        Avalonia.Controls.Grid.SetRow(stableHeader, 0);
+        Avalonia.Controls.Grid.SetRow(bodyHost, 1);
+        Avalonia.Controls.Grid.SetRow(footerHost, 2);
+        grid.Children.Add(stableHeader);
+        grid.Children.Add(bodyHost);
+        grid.Children.Add(footerHost);
+
+        var mainBorder = new Border()
+            .BorderThickness(1)
+            .BorderBrush(Brushes.Gray)
+            .Child(grid);
+
+        // Note: Keyboard navigation temporarily disabled to ensure TextBox input works reliably.
+
+        // Update reactive parts without rebuilding root or header
+        _saGrid.SetUIUpdateCallback(() =>
+        {
+            _updateCounter++;
+            Dispatcher.UIThread.Post(() =>
             {
-                // Don't steal focus if the user clicked on a TextBox or its container
-                if (e.Source is not TextBox && e.Source is not Border border)
-                {
-                    mainBorder.Focus();
-                }
-                else if (e.Source is Border borderSource && borderSource.Child is TextBox)
-                {
-                    // If clicking on a border containing a TextBox, focus the TextBox instead
-                    borderSource.Child.Focus();
-                }
-            };
-
-            return mainBorder;
+                bodyHost.Content = _bodyRenderer.CreateBody(_saGrid, () => _saGrid, () => _updateCounter);
+                footerHost.Content = _footerRenderer.CreateFooter(_saGrid);
+            });
         });
+
+        // Do not force focus on pointer press; let child controls manage focus naturally
+
+        return mainBorder;
     }
 }
