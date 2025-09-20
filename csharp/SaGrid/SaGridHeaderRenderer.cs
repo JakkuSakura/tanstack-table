@@ -149,16 +149,16 @@ internal class SaGridHeaderRenderer<TData>
             {
                 var filterValue = string.IsNullOrWhiteSpace(tb.Text) ? (object?)null : tb.Text;
                 Console.WriteLine($"Filter changed for column {column.Id}: '{tb.Text}' -> {(filterValue == null ? "null" : filterValue)}");
-                if (filterValue != null)
-                {
-                    saGrid.SetColumnFilter(column.Id, filterValue);
-                }
-                else
-                {
-                    saGrid.SetColumnFilter(column.Id, ""); // Use empty string instead of null
-                }
+                saGrid.SetColumnFilter(column.Id, filterValue);
             }
         };
+
+        // Initialize TextBox with current filter value (if any)
+        var currentFilter = saGrid.State.ColumnFilters?.Filters.FirstOrDefault(f => f.Id == column.Id)?.Value?.ToString();
+        if (!string.IsNullOrEmpty(currentFilter))
+        {
+            textBox.Text = currentFilter;
+        }
 
         return textBox;
     }

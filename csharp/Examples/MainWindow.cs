@@ -68,9 +68,7 @@ public class MainWindow : Window
         // Configure SaGrid advanced features
         ConfigureSaGridFeatures();
         
-        // Test programmatic filtering
-        Console.WriteLine("Testing programmatic filter - setting department filter to 'Engineering'");
-        saGrid.SetColumnFilter("department", "Engineering");
+        // Start with no programmatic filters; user can filter via headers
 
         // Create UI with advanced SaGrid features
         var ui = CreateAdvancedUI();
@@ -152,15 +150,7 @@ public class MainWindow : Window
         };
         container.Children.Add(header);
 
-        // Test TextBox to verify input works outside the table
-        var testTextBox = new TextBox
-        {
-            Watermark = "Test TextBox - type here...",
-            Margin = new Thickness(20, 10),
-            Width = 200
-        };
-        testTextBox.TextChanged += (s, e) => Debug.WriteLine($"Test TextBox changed: {testTextBox.Text}");
-        container.Children.Add(testTextBox);
+        // Removed test TextBox used during debugging
 
         // Controls section
         var controlsPanel = CreateControlsPanel();

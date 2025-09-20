@@ -16,7 +16,7 @@ public class SaGridComponent<TData> : Component
 {
     private readonly SaGrid<TData> _saGrid;
     private (Func<SaGrid<TData>>, Action<SaGrid<TData>>)? _gridSignal;
-    private int _updateCounter = 0;
+    private (Func<int>, Action<int>)? _selectionSignal;
 
     // Renderers
     private readonly SaGridHeaderRenderer<TData> _headerRenderer;
@@ -42,10 +42,22 @@ public class SaGridComponent<TData> : Component
     {
         Console.WriteLine("SaGridComponent.Build invoked");
         
-        // Initialize signal once for potential external reactivity (not used to rebuild root)
+        // Initialize signals and hook SaGrid UI update callback once
         if (_gridSignal == null)
         {
             _gridSignal = CreateSignal(_saGrid);
+            _selectionSignal = CreateSignal(0);
+
+            var (gridGetter, gridSetter) = _gridSignal.Value;
+            var (selectionGetter, selectionSetter) = _selectionSignal.Value;
+            var updateCounter = 0;
+
+            _saGrid.SetUIUpdateCallback(() =>
+            {
+                updateCounter++;
+                gridSetter?.Invoke(_saGrid);
+                selectionSetter?.Invoke(updateCounter);
+            });
         }
 
         // Create stable header once to preserve TextBox focus and content
@@ -60,46 +72,36 @@ public class SaGridComponent<TData> : Component
             }
         }
 
-        // Hosts for reactive parts
-        var bodyHost = new ContentControl();
-        var footerHost = new ContentControl();
-
-        // Initial content
-        bodyHost.Content = _bodyRenderer.CreateBody(_saGrid, () => _saGrid, () => _updateCounter);
-        footerHost.Content = _footerRenderer.CreateFooter(_saGrid);
-
-        // Root container (stable) with proper layout to avoid overlaps
-        var grid = new Grid();
-        grid.RowDefinitions = new RowDefinitions("Auto,*,Auto");
-
-        // Place controls in rows
-        Avalonia.Controls.Grid.SetRow(stableHeader, 0);
-        Avalonia.Controls.Grid.SetRow(bodyHost, 1);
-        Avalonia.Controls.Grid.SetRow(footerHost, 2);
-        grid.Children.Add(stableHeader);
-        grid.Children.Add(bodyHost);
-        grid.Children.Add(footerHost);
-
-        var mainBorder = new Border()
-            .BorderThickness(1)
-            .BorderBrush(Brushes.Gray)
-            .Child(grid);
-
-        // Note: Keyboard navigation temporarily disabled to ensure TextBox input works reliably.
-
-        // Update reactive parts without rebuilding root or header
-        _saGrid.SetUIUpdateCallback(() =>
+        return Reactive(() =>
         {
-            _updateCounter++;
-            Dispatcher.UIThread.Post(() =>
+            var currentGrid = Grid; // Access reactive grid signal
+
+            // Root container (stable layout) with header/body/footer
+            var grid = new Grid
             {
-                bodyHost.Content = _bodyRenderer.CreateBody(_saGrid, () => _saGrid, () => _updateCounter);
-                footerHost.Content = _footerRenderer.CreateFooter(_saGrid);
-            });
+                RowDefinitions = new RowDefinitions("Auto,*,Auto")
+            };
+
+            Avalonia.Controls.Grid.SetRow(stableHeader, 0);
+            var body = _bodyRenderer.CreateBody(currentGrid, () => Grid, _selectionSignal?.Item1);
+            Avalonia.Controls.Grid.SetRow(body, 1);
+            var footer = _footerRenderer.CreateFooter(currentGrid);
+            Avalonia.Controls.Grid.SetRow(footer, 2);
+
+            grid.Children.Add(stableHeader);
+            grid.Children.Add(body);
+            grid.Children.Add(footer);
+
+            var mainBorder = new Border()
+                .BorderThickness(1)
+                .BorderBrush(Brushes.Gray)
+                .Child(grid);
+
+            // Note: Keyboard navigation remains disabled here to prioritize typing in filter inputs
+
+            // Do not force focus on pointer press; let child controls manage focus naturally
+
+            return mainBorder;
         });
-
-        // Do not force focus on pointer press; let child controls manage focus naturally
-
-        return mainBorder;
     }
 }

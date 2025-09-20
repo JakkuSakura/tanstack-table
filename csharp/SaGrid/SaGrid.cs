@@ -24,6 +24,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void SetGlobalFilter(object? value)
     {
         this.SetGlobalFilter(value); // Use extension method from base
+        _onUIUpdate?.Invoke();
     }
 
     public object? GetGlobalFilterValue()
@@ -34,6 +35,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void ClearGlobalFilter()
     {
         this.ClearGlobalFilter(); // Use extension method from base
+        _onUIUpdate?.Invoke();
     }
 
     // Export functionality
@@ -389,18 +391,23 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void ClearColumnFilters()
     {
         SetState(state => state with { ColumnFilters = null });
+        _onUIUpdate?.Invoke();
     }
 
-    public void SetColumnFilter(string columnId, object value)
+    public void SetColumnFilter(string columnId, object? value)
     {
         var currentFilters = State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
         var newFilters = currentFilters.Where(f => f.Id != columnId).ToList();
-        newFilters.Add(new ColumnFilter(columnId, value));
+        if (value != null)
+        {
+            newFilters.Add(new ColumnFilter(columnId, value));
+        }
         
         SetState(state => state with 
         { 
-            ColumnFilters = new ColumnFiltersState(newFilters)
+            ColumnFilters = newFilters.Count > 0 ? new ColumnFiltersState(newFilters) : null
         });
+        _onUIUpdate?.Invoke();
     }
 
     // Cell selection functionality
