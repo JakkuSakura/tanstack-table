@@ -23,18 +23,23 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     // Advanced filtering capabilities
     public void SetGlobalFilter(object? value)
     {
-        this.SetGlobalFilter(value); // Use extension method from base
+        GlobalFilterExtensions.SetGlobalFilter(this, value);
         _onUIUpdate?.Invoke();
     }
 
     public object? GetGlobalFilterValue()
     {
-        return this.GetGlobalFilterValue(); // Use extension method from base
+        return GlobalFilterExtensions.GetGlobalFilterValue(this);
     }
 
     public void ClearGlobalFilter()
     {
-        this.ClearGlobalFilter(); // Use extension method from base
+        GlobalFilterExtensions.ClearGlobalFilter(this);
+        // When filters change, reset to first page to avoid empty views
+        if (State.Pagination != null)
+        {
+            base.SetPageIndex(0);
+        }
         _onUIUpdate?.Invoke();
     }
 
@@ -391,13 +396,29 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void ClearColumnFilters()
     {
         SetState(state => state with { ColumnFilters = null });
+        if (State.Pagination != null)
+        {
+            base.SetPageIndex(0);
+        }
         _onUIUpdate?.Invoke();
     }
 
     public void SetColumnFilter(string columnId, object? value)
     {
         var currentFilters = State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
+        var existing = currentFilters.FirstOrDefault(f => f.Id == columnId);
+        var currentValue = existing?.Value;
         var newFilters = currentFilters.Where(f => f.Id != columnId).ToList();
+
+        // Skip state update if value is effectively unchanged
+        var isEqual = (currentValue == null && value == null) ||
+                      (currentValue != null && value != null &&
+                       string.Equals(currentValue.ToString(), value.ToString(), StringComparison.Ordinal));
+        if (isEqual)
+        {
+            return;
+        }
+
         if (value != null)
         {
             newFilters.Add(new ColumnFilter(columnId, value));
@@ -407,6 +428,10 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         { 
             ColumnFilters = newFilters.Count > 0 ? new ColumnFiltersState(newFilters) : null
         });
+        if (State.Pagination != null)
+        {
+            base.SetPageIndex(0);
+        }
         _onUIUpdate?.Invoke();
     }
 
@@ -415,6 +440,31 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void SetUIUpdateCallback(Action? callback)
     {
         _onUIUpdate = callback;
+    }
+
+    // Pagination wrappers to ensure UI updates
+    public new void SetPageIndex(int pageIndex)
+    {
+        base.SetPageIndex(pageIndex);
+        _onUIUpdate?.Invoke();
+    }
+
+    public new void SetPageSize(int pageSize)
+    {
+        base.SetPageSize(pageSize);
+        _onUIUpdate?.Invoke();
+    }
+
+    public new void NextPage()
+    {
+        base.NextPage();
+        _onUIUpdate?.Invoke();
+    }
+
+    public new void PreviousPage()
+    {
+        base.PreviousPage();
+        _onUIUpdate?.Invoke();
     }
 
     public void SelectCell(int rowIndex, string columnId, bool addToSelection = false)

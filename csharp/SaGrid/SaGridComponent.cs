@@ -60,21 +60,12 @@ public class SaGridComponent<TData> : Component
             });
         }
 
-        // Create stable header once to preserve TextBox focus and content
-        var stableHeader = _headerRenderer.CreateHeader(_saGrid);
-        // Make header clearly on top and hit-testable
-        if (stableHeader is Control hdrCtrl)
-        {
-            hdrCtrl.SetValue(Panel.ZIndexProperty, 1);
-            if (hdrCtrl is Panel hdrPanel)
-            {
-                hdrPanel.Background = Brushes.White;
-            }
-        }
-
         return Reactive(() =>
         {
             var currentGrid = Grid; // Access reactive grid signal
+            // Also depend on the selection/update signal so any grid state
+            // change (filters, pagination, etc.) re-renders the body/footer
+            var renderCounter = _selectionSignal?.Item1();
 
             // Root container (stable layout) with header/body/footer
             var grid = new Grid
@@ -82,13 +73,23 @@ public class SaGridComponent<TData> : Component
                 RowDefinitions = new RowDefinitions("Auto,*,Auto")
             };
 
-            Avalonia.Controls.Grid.SetRow(stableHeader, 0);
+            // Recreate header reactively to avoid reparenting exceptions
+            var header = _headerRenderer.CreateHeader(currentGrid);
+            if (header is Control hdrCtrl)
+            {
+                hdrCtrl.SetValue(Panel.ZIndexProperty, 1);
+                if (hdrCtrl is Panel hdrPanel)
+                {
+                    hdrPanel.Background = Brushes.White;
+                }
+            }
+            Avalonia.Controls.Grid.SetRow(header, 0);
             var body = _bodyRenderer.CreateBody(currentGrid, () => Grid, _selectionSignal?.Item1);
             Avalonia.Controls.Grid.SetRow(body, 1);
             var footer = _footerRenderer.CreateFooter(currentGrid);
             Avalonia.Controls.Grid.SetRow(footer, 2);
 
-            grid.Children.Add(stableHeader);
+            grid.Children.Add(header);
             grid.Children.Add(body);
             grid.Children.Add(footer);
 

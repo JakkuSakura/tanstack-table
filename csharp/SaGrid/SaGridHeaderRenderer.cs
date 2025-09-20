@@ -147,16 +147,29 @@ internal class SaGridHeaderRenderer<TData>
         {
             if (sender is TextBox tb)
             {
-                var filterValue = string.IsNullOrWhiteSpace(tb.Text) ? (object?)null : tb.Text;
-                Console.WriteLine($"Filter changed for column {column.Id}: '{tb.Text}' -> {(filterValue == null ? "null" : filterValue)}");
-                saGrid.SetColumnFilter(column.Id, filterValue);
+                var newValue = string.IsNullOrWhiteSpace(tb.Text) ? (object?)null : tb.Text;
+
+                // Avoid redundant SetColumnFilter calls that can cause render loops
+                var currentValue = saGrid.State.ColumnFilters?.Filters
+                    .FirstOrDefault(f => f.Id == column.Id)?.Value;
+
+                var equals = (currentValue == null && newValue == null) ||
+                             (currentValue != null && newValue != null &&
+                              string.Equals(currentValue.ToString(), newValue.ToString(), StringComparison.Ordinal));
+
+                if (!equals)
+                {
+                    Console.WriteLine($"Filter changed for column {column.Id}: '{currentValue}' -> '{newValue}'");
+                    saGrid.SetColumnFilter(column.Id, newValue);
+                }
             }
         };
 
         // Initialize TextBox with current filter value (if any)
         var currentFilter = saGrid.State.ColumnFilters?.Filters.FirstOrDefault(f => f.Id == column.Id)?.Value?.ToString();
-        if (!string.IsNullOrEmpty(currentFilter))
+        if (!string.IsNullOrEmpty(currentFilter) && textBox.Text != currentFilter)
         {
+            // Set Text without firing TextChanged loop by checking inequality
             textBox.Text = currentFilter;
         }
 
