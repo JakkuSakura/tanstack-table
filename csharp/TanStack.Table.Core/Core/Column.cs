@@ -222,44 +222,64 @@ public class Column<TData> : IColumn<TData>
     public void ToggleSorting(SortDirection? direction = null)
     {
         var currentSorting = _table.State.Sorting ?? new SortingState();
-        var newSorting = currentSorting;
+        var existing = currentSorting.FirstOrDefault(s => s.Id == Id);
 
-        var existingSort = newSorting.FirstOrDefault(s => s.Id == Id);
+        // Determine if multi-sort is enabled (table options only)
+        var allowMulti = _table.Options.EnableMultiSort;
 
-        if (existingSort != null)
+        if (existing != null)
         {
             if (direction.HasValue)
             {
-                newSorting = newSorting.Where(s => s.Id != Id);
-                newSorting = newSorting.Add(new ColumnSort(Id, direction.Value));
-            }
-            else
-            {
-                var currentDir = existingSort.Direction;
-                if (currentDir == TanStack.Table.Core.SortDirection.Ascending)
+                // Replace this column's direction
+                var replaced = currentSorting.Where(s => s.Id != Id);
+                if (allowMulti)
                 {
-                    newSorting = newSorting.Where(s => s.Id != Id);
-                    newSorting = newSorting.Add(new ColumnSort(Id, TanStack.Table.Core.SortDirection.Descending));
+                    replaced = replaced.Add(new ColumnSort(Id, direction.Value));
+                    _table.SetState(state => state with { Sorting = replaced });
                 }
                 else
                 {
-                    newSorting = newSorting.Where(s => s.Id != Id);
+                    _table.SetState(state => state with { Sorting = new SortingState(new List<ColumnSort>{ new ColumnSort(Id, direction.Value) }) });
+                }
+            }
+            else
+            {
+                // Cycle this column: asc -> desc -> remove
+                var remaining = currentSorting.Where(s => s.Id != Id);
+                if (existing.Direction == TanStack.Table.Core.SortDirection.Ascending)
+                {
+                    if (allowMulti)
+                    {
+                        remaining = remaining.Add(new ColumnSort(Id, TanStack.Table.Core.SortDirection.Descending));
+                        _table.SetState(state => state with { Sorting = remaining });
+                    }
+                    else
+                    {
+                        _table.SetState(state => state with { Sorting = new SortingState(new List<ColumnSort>{ new ColumnSort(Id, TanStack.Table.Core.SortDirection.Descending) }) });
+                    }
+                }
+                else
+                {
+                    // remove this column from sorting
+                    _table.SetState(state => state with { Sorting = remaining.Count() > 0 ? remaining : null });
                 }
             }
         }
         else
         {
-            var sortDir = direction ?? TanStack.Table.Core.SortDirection.Ascending;
-            if (_table.Options.EnableMultiSort)
-                newSorting = newSorting.Add(new ColumnSort(Id, sortDir));
+            // Not sorted yet: add as ascending
+            var dir = direction ?? TanStack.Table.Core.SortDirection.Ascending;
+            if (allowMulti)
+            {
+                var appended = currentSorting.Add(new ColumnSort(Id, dir));
+                _table.SetState(state => state with { Sorting = appended });
+            }
             else
             {
-                newSorting = new SortingState();
-                newSorting = newSorting.Add(new ColumnSort(Id, sortDir));
+                _table.SetState(state => state with { Sorting = new SortingState(new List<ColumnSort>{ new ColumnSort(Id, dir) }) });
             }
         }
-
-        _table.SetState(state => state with { Sorting = newSorting });
     }
 
     public void ClearSorting()

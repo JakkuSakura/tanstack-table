@@ -7,6 +7,7 @@ using SaGrid;
 using SolidAvalonia;
 using static SolidAvalonia.Solid;
 using System.Diagnostics;
+using Avalonia.Threading;
 
 namespace Examples;
 
@@ -22,6 +23,9 @@ public class MainWindow : Window
 
     private SaGrid<Person> saGrid = null!;
     private TextBlock infoTextBlock = null!;
+    private Button _multiSortBtn = null!;
+    private Button _resetFiltersBtn = null!;
+    private Button _resetSortingBtn = null!;
 
     private void InitializeComponent()
     {
@@ -57,6 +61,15 @@ public class MainWindow : Window
             EnableRowSelection = true,
             EnableCellSelection = true,
             EnableColumnResizing = true,
+            OnStateChange = state =>
+            {
+                // Keep info bar and control button labels in sync with state
+                Dispatcher.UIThread.Post(() =>
+                {
+                    UpdateInfoText();
+                    UpdateControlButtons();
+                });
+            },
             State = new TableState<Person>
             {
                 Pagination = new PaginationState { PageIndex = 0, PageSize = 10 }
@@ -184,49 +197,66 @@ public class MainWindow : Window
         var buttonPanel = new StackPanel 
         { 
             Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 10, 0, 0)
+            Margin = new Thickness(0, 10, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
         };
 
-        var multiSortBtn = new Button 
+        _multiSortBtn = new Button 
         { 
-            Content = "⇅ Toggle Multi‑Sort", 
-            Padding = new Thickness(10, 5)
+            Content = $"⇅ Multi‑Sort: {(saGrid.IsMultiSortEnabled() ? "ON" : "OFF")}", 
+            Padding = new Thickness(12, 6),
+            Height = 32,
+            MinWidth = 140,
+            Margin = new Thickness(0, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center
         };
-        multiSortBtn.Click += (sender, e) =>
+        _multiSortBtn.Click += (sender, e) =>
         {
             saGrid.ToggleMultiSortOverride();
             UpdateInfoText();
+            UpdateControlButtons();
         };
 
-        var resetFiltersBtn = new Button 
+        _resetFiltersBtn = new Button 
         { 
-            Content = "🧹 Reset Filters", 
-            Margin = new Thickness(10, 0, 0, 0),
-            Padding = new Thickness(10, 5)
+            Content = $"🧹 Reset Filters (0)", 
+            Margin = new Thickness(0, 0, 8, 0),
+            Padding = new Thickness(12, 6),
+            Height = 32,
+            MinWidth = 140,
+            VerticalAlignment = VerticalAlignment.Center
         };
-        resetFiltersBtn.Click += (sender, e) =>
+        _resetFiltersBtn.Click += (sender, e) =>
         {
             saGrid.ClearGlobalFilter();
             saGrid.ClearColumnFilters();
             UpdateInfoText();
+            UpdateControlButtons();
         };
 
-        var resetSortingBtn = new Button 
+        _resetSortingBtn = new Button 
         { 
-            Content = "↕️ Reset Sorting", 
-            Margin = new Thickness(10, 0, 0, 0),
-            Padding = new Thickness(10, 5)
+            Content = $"↕️ Reset Sorting (0)", 
+            Margin = new Thickness(0, 0, 8, 0),
+            Padding = new Thickness(12, 6),
+            Height = 32,
+            MinWidth = 140,
+            VerticalAlignment = VerticalAlignment.Center
         };
-        resetSortingBtn.Click += (sender, e) =>
+        _resetSortingBtn.Click += (sender, e) =>
         {
             saGrid.SetSorting(Array.Empty<ColumnSort>());
             UpdateInfoText();
+            UpdateControlButtons();
         };
 
-        buttonPanel.Children.Add(multiSortBtn);
-        buttonPanel.Children.Add(resetFiltersBtn);
-        buttonPanel.Children.Add(resetSortingBtn);
+        buttonPanel.Children.Add(_multiSortBtn);
+        buttonPanel.Children.Add(_resetFiltersBtn);
+        buttonPanel.Children.Add(_resetSortingBtn);
         panel.Children.Add(buttonPanel);
+
+        // Initialize button labels based on current state
+        UpdateControlButtons();
 
         return panel;
     }
@@ -258,6 +288,25 @@ public class MainWindow : Window
                                $"Multi‑Sort: {multiSort} | Global Filter: {(hasGlobalFilter ? "✅" : "❌")} | " +
                                $"Column Filters: {(hasColumnFilters == true ? "✅" : "❌")} | " +
                                $"🎯 {cellSelectionInfo}";
+        }
+    }
+
+    private void UpdateControlButtons()
+    {
+        if (_multiSortBtn != null)
+        {
+            _multiSortBtn.Content = $"⇅ Multi‑Sort: {(saGrid.IsMultiSortEnabled() ? "ON" : "OFF")}";
+        }
+        if (_resetFiltersBtn != null)
+        {
+            var cf = saGrid.State.ColumnFilters?.Filters.Count ?? 0;
+            var gf = saGrid.State.GlobalFilter != null ? 1 : 0;
+            _resetFiltersBtn.Content = $"🧹 Reset Filters ({cf + gf})";
+        }
+        if (_resetSortingBtn != null)
+        {
+            var sc = saGrid.State.Sorting?.Columns.Count ?? 0;
+            _resetSortingBtn.Content = $"↕️ Reset Sorting ({sc})";
         }
     }
 }

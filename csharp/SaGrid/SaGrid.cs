@@ -328,6 +328,12 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         ScheduleUIUpdate();
     }
 
+    public void SetSorting(string columnId, SortDirection direction)
+    {
+        base.SetSorting(columnId, direction);
+        ScheduleUIUpdate();
+    }
+
     public string RenderCell(Row<TData> row, string columnId)
     {
         if (_cellRenderer != null)

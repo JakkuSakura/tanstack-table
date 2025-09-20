@@ -872,48 +872,45 @@ public class Table<TData> : ITable<TData>
 
         var sortedRows = sourceRowModel.Rows.ToList();
 
-        // Sort by each column in order (stable sort)
-        for (int i = sorting.Columns.Count - 1; i >= 0; i--)
+        // Composite comparer: apply sort columns in defined order
+        sortedRows.Sort((row1, row2) =>
         {
-            var sortColumn = sorting.Columns[i];
-            var column = GetColumn(sortColumn.Id);
-            if (column == null) continue;
-
-            sortedRows.Sort((row1, row2) =>
+            foreach (var sortColumn in sorting.Columns)
             {
+                var column = GetColumn(sortColumn.Id);
+                if (column == null) continue;
+
                 var cell1 = row1.GetCell(sortColumn.Id);
                 var cell2 = row2.GetCell(sortColumn.Id);
-                
+
                 var value1 = cell1.Value;
                 var value2 = cell2.Value;
 
-                // Handle null values (nulls go to end)
-                if (value1 == null && value2 == null) return 0;
-                if (value1 == null) return 1;
+                if (value1 == null && value2 == null) continue; // equal, continue to next key
+                if (value1 == null) return 1; // nulls last
                 if (value2 == null) return -1;
 
-                int comparison = 0;
-
-                // Use IComparable if available
+                int comparison;
                 if (value1 is IComparable comparable1 && value2 is IComparable)
                 {
                     comparison = comparable1.CompareTo(value2);
                 }
                 else
                 {
-                    // Fall back to string comparison
                     comparison = string.Compare(value1.ToString(), value2.ToString(), StringComparison.Ordinal);
                 }
 
-                // Reverse for descending sort
-                if (sortColumn.Direction == SortDirection.Descending)
+                if (comparison != 0)
                 {
-                    comparison = -comparison;
+                    if (sortColumn.Direction == SortDirection.Descending)
+                    {
+                        comparison = -comparison;
+                    }
+                    return comparison;
                 }
-
-                return comparison;
-            });
-        }
+            }
+            return 0;
+        });
 
         return new RowModel<TData>
         {

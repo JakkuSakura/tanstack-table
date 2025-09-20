@@ -95,10 +95,10 @@ internal class SaGridHeaderRenderer<TData>
 
                         button.Content = label;
 
-                        // Handle modifiers for multi-sort at PointerPressed to capture KeyModifiers
-                        button.PointerPressed += (s, e) =>
+                        // Handle sorting on pointer press at the border level so the whole cell is clickable
+                        // TanStack behavior: modifiers append/remove, plain toggles single sort
+                        void HandlePress(KeyModifiers mods)
                         {
-                            var mods = e.KeyModifiers;
                             var multiRequested = mods.HasFlag(KeyModifiers.Shift) ||
                                                  mods.HasFlag(KeyModifiers.Control) ||
                                                  mods.HasFlag(KeyModifiers.Meta);
@@ -106,23 +106,38 @@ internal class SaGridHeaderRenderer<TData>
                             var isMulti = saGrid is SaGrid<TData> g && g.IsMultiSortEnabled();
                             if (multiRequested && isMulti)
                             {
-                                // Append/remove this column in the multi-sort chain
-                                column.ToggleSorting();
-                                e.Handled = true;
+                                // Append/remove this column in the multi-sort chain (and trigger UI update)
+                                var currentDir = column.SortDirection;
+                                if (currentDir == null)
+                                {
+                                    var current = saGrid.State.Sorting?.Columns ?? new List<ColumnSort>();
+                                    var newList = current.Where(s => s.Id != column.Id).ToList();
+                                    newList.Add(new ColumnSort(column.Id, SortDirection.Ascending));
+                                    saGrid.SetSorting(newList);
+                                }
+                                else if (currentDir == SortDirection.Ascending)
+                                {
+                                    var current = saGrid.State.Sorting?.Columns ?? new List<ColumnSort>();
+                                    var newList = current.Where(s => s.Id != column.Id).ToList();
+                                    newList.Add(new ColumnSort(column.Id, SortDirection.Descending));
+                                    saGrid.SetSorting(newList);
+                                }
+                                else
+                                {
+                                    var current = saGrid.State.Sorting?.Columns ?? new List<ColumnSort>();
+                                    var newList = current.Where(s => s.Id != column.Id).ToList();
+                                    saGrid.SetSorting(newList);
+                                }
                                 return;
                             }
-                            // Otherwise, single-sort cycle below (handled on Click)
-                        };
 
-                        button.Click += (s, e) =>
-                        {
-                            // Single-sort: replace others and cycle Asc -> Desc -> None
-                            var currentDir = column.SortDirection;
-                            if (currentDir == null)
+                            // Plain click path: single-sort (replace others) and cycle
+                            var dir = column.SortDirection;
+                            if (dir == null)
                             {
                                 saGrid.SetSorting(new[] { new ColumnSort(column.Id, SortDirection.Ascending) });
                             }
-                            else if (currentDir == SortDirection.Ascending)
+                            else if (dir == SortDirection.Ascending)
                             {
                                 saGrid.SetSorting(new[] { new ColumnSort(column.Id, SortDirection.Descending) });
                             }
@@ -130,6 +145,18 @@ internal class SaGridHeaderRenderer<TData>
                             {
                                 saGrid.SetSorting(Array.Empty<ColumnSort>());
                             }
+                        }
+
+                        border.PointerPressed += (s, e) =>
+                        {
+                            HandlePress(e.KeyModifiers);
+                            e.Handled = true;
+                        };
+
+                        // Also attach Click for accessibility and platforms that don't pass modifiers on press
+                        button.Click += (s, e) =>
+                        {
+                            HandlePress(KeyModifiers.None);
                         };
 
                         // Make the entire cell clickable
