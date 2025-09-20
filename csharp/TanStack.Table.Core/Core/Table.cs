@@ -746,6 +746,8 @@ public class Table<TData> : ITable<TData>
             return sourceRowModel;
         }
 
+        Console.WriteLine($"DEBUG Filter: global={(globalFilter?.Value?.ToString() ?? "<none>")}, columnFilters={(columnFilters?.Filters.Count ?? 0)}");
+
         var filteredRows = sourceRowModel.Rows.Where(row => 
         {
             // Apply global filter
@@ -768,6 +770,8 @@ public class Table<TData> : ITable<TData>
 
             return true;
         }).ToList();
+
+        Console.WriteLine($"DEBUG Filter result: {filteredRows.Count} / {sourceRowModel.Rows.Count} rows");
 
         return new RowModel<TData>
         {
@@ -812,17 +816,31 @@ public class Table<TData> : ITable<TData>
         // Handle different filter types based on value types
         if (filterValue is string stringFilter)
         {
-            var cellString = cellValue.ToString() ?? "";
-            
-            // For exact matches, use equality; for partial matches, use contains
-            // If the filter string is a complete word/value, do exact match
-            if (cellString.Equals(stringFilter, StringComparison.OrdinalIgnoreCase))
+            // If the cell is numeric/bool and the filter parses to that type, do typed comparison
+            if (cellValue is int cellInt && int.TryParse(stringFilter, out var parsedInt))
             {
-                return true;
+                return cellInt == parsedInt;
             }
-            
-            // Otherwise do contains match (case insensitive)
-            return cellString.Contains(stringFilter, StringComparison.OrdinalIgnoreCase);
+            if (cellValue is double cellDouble && double.TryParse(stringFilter, out var parsedDouble))
+            {
+                return Math.Abs(cellDouble - parsedDouble) < 0.000_001;
+            }
+            if (cellValue is float cellFloat && float.TryParse(stringFilter, out var parsedFloat))
+            {
+                return Math.Abs(cellFloat - parsedFloat) < 0.000_001f;
+            }
+            if (cellValue is decimal cellDecimal && decimal.TryParse(stringFilter, out var parsedDecimal))
+            {
+                return cellDecimal == parsedDecimal;
+            }
+            if (cellValue is bool cellBool && bool.TryParse(stringFilter, out var parsedBool))
+            {
+                return cellBool == parsedBool;
+            }
+
+            // Fallback to string contains (case-insensitive)
+            var cellString = cellValue.ToString() ?? "";
+            return cellString.IndexOf(stringFilter, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         if (filterValue is bool boolFilter)
