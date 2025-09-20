@@ -65,7 +65,11 @@ internal class SaGridHeaderRenderer<TData>
                             if (column.SortDirection != null)
                             {
                                 var arrow = column.SortDirection == TanStack.Table.Core.SortDirection.Ascending ? "▲" : "▼";
-                                var index = column.SortIndex.HasValue ? $" {column.SortIndex.Value + 1}" : "";
+                                // Only show index when multi-sort is enabled (runtime toggle aware)
+                                var isMulti = saGrid is SaGrid<TData> g && g.IsMultiSortEnabled();
+                                var index = (isMulti && column.SortIndex.HasValue)
+                                    ? $" {column.SortIndex.Value + 1}"
+                                    : string.Empty;
                                 sortSuffix = $" {arrow}{index}";
                             }
                             var container = new Grid
@@ -99,7 +103,8 @@ internal class SaGridHeaderRenderer<TData>
                                                  mods.HasFlag(KeyModifiers.Control) ||
                                                  mods.HasFlag(KeyModifiers.Meta);
 
-                            if (multiRequested && saGrid.Options.EnableMultiSort)
+                            var isMulti = saGrid is SaGrid<TData> g && g.IsMultiSortEnabled();
+                            if (multiRequested && isMulti)
                             {
                                 // Append/remove this column in the multi-sort chain
                                 column.ToggleSorting();

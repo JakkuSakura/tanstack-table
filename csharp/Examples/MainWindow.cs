@@ -103,8 +103,7 @@ public class MainWindow : Window
 
     private void ConfigureSaGridFeatures()
     {
-        // Set up theming
-        saGrid.SetTheme("light");
+        // No theming toggle in example; focus on table features
         
         // Add row actions
         saGrid.AddRowAction("edit", "Edit", row => 
@@ -181,159 +180,53 @@ public class MainWindow : Window
             Margin = new Thickness(20, 10)
         };
 
-        // Note: Column filtering is now handled directly in the table headers
-
-        // Action buttons
+        // Minimal, reliable actions
         var buttonPanel = new StackPanel 
         { 
             Orientation = Orientation.Horizontal,
             Margin = new Thickness(0, 10, 0, 0)
         };
 
-        var exportCsvBtn = new Button 
+        var multiSortBtn = new Button 
         { 
-            Content = "📄 Export CSV", 
-            Margin = new Thickness(0, 0, 10, 0),
+            Content = "⇅ Toggle Multi‑Sort", 
             Padding = new Thickness(10, 5)
         };
-        exportCsvBtn.Click += (sender, e) =>
+        multiSortBtn.Click += (sender, e) =>
         {
-            try
-            {
-                var csv = saGrid.ExportToCsv();
-                Debug.WriteLine($"CSV Export: {csv.Length} characters");
-                Debug.WriteLine("CSV Content Preview:");
-                Debug.WriteLine(csv.Substring(0, Math.Min(200, csv.Length)) + "...");
-                
-                // Update UI to show export happened
-                infoTextBlock.Text += " | CSV Export: ✅ Success";
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"CSV Export Error: {ex.Message}");
-                infoTextBlock.Text += " | CSV Export: ❌ Error";
-            }
-        };
-
-        var exportJsonBtn = new Button 
-        { 
-            Content = "📋 Export JSON", 
-            Margin = new Thickness(0, 0, 10, 0),
-            Padding = new Thickness(10, 5)
-        };
-        exportJsonBtn.Click += (sender, e) =>
-        {
-            try
-            {
-                var json = saGrid.ExportToJson();
-                Debug.WriteLine($"JSON Export: {json.Length} characters");
-                Debug.WriteLine("JSON Content Preview:");
-                Debug.WriteLine(json.Substring(0, Math.Min(200, json.Length)) + "...");
-                
-                // Update UI to show export happened
-                infoTextBlock.Text += " | JSON Export: ✅ Success";
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"JSON Export Error: {ex.Message}");
-                infoTextBlock.Text += " | JSON Export: ❌ Error";
-            }
-        };
-
-        var themeBtn = new Button 
-        { 
-            Content = "🎨 Toggle Theme", 
-            Padding = new Thickness(10, 5)
-        };
-        themeBtn.Click += (sender, e) =>
-        {
-            var currentTheme = saGrid.CurrentTheme ?? "light";
-            var newTheme = currentTheme == "light" ? "dark" : "light";
-            saGrid.SetTheme(newTheme);
+            saGrid.ToggleMultiSortOverride();
             UpdateInfoText();
         };
 
-        buttonPanel.Children.Add(exportCsvBtn);
-        buttonPanel.Children.Add(exportJsonBtn);
-        buttonPanel.Children.Add(themeBtn);
+        var resetFiltersBtn = new Button 
+        { 
+            Content = "🧹 Reset Filters", 
+            Margin = new Thickness(10, 0, 0, 0),
+            Padding = new Thickness(10, 5)
+        };
+        resetFiltersBtn.Click += (sender, e) =>
+        {
+            saGrid.ClearGlobalFilter();
+            saGrid.ClearColumnFilters();
+            UpdateInfoText();
+        };
+
+        var resetSortingBtn = new Button 
+        { 
+            Content = "↕️ Reset Sorting", 
+            Margin = new Thickness(10, 0, 0, 0),
+            Padding = new Thickness(10, 5)
+        };
+        resetSortingBtn.Click += (sender, e) =>
+        {
+            saGrid.SetSorting(Array.Empty<ColumnSort>());
+            UpdateInfoText();
+        };
+
+        buttonPanel.Children.Add(multiSortBtn);
+        buttonPanel.Children.Add(resetFiltersBtn);
+        buttonPanel.Children.Add(resetSortingBtn);
         panel.Children.Add(buttonPanel);
-
-        // Cell selection controls
-        var cellSelectionPanel = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 10, 0, 0)
-        };
-
-        var selectCellBtn = new Button 
-        { 
-            Content = "🎯 Select Cell (0,1)", 
-            Margin = new Thickness(0, 0, 10, 0),
-            Padding = new Thickness(10, 5)
-        };
-        selectCellBtn.Click += (sender, e) =>
-        {
-            saGrid.SelectCell(0, "firstName");
-            UpdateInfoText();
-        };
-
-        var selectRangeBtn = new Button 
-        { 
-            Content = "📐 Select Range (0,0)-(2,2)", 
-            Margin = new Thickness(0, 0, 10, 0),
-            Padding = new Thickness(10, 5)
-        };
-        selectRangeBtn.Click += (sender, e) =>
-        {
-            saGrid.SelectCellRange(0, "id", 2, "age");
-            UpdateInfoText();
-        };
-
-        var copyCellsBtn = new Button 
-        { 
-            Content = "📋 Copy Selected", 
-            Margin = new Thickness(0, 0, 10, 0),
-            Padding = new Thickness(10, 5)
-        };
-        copyCellsBtn.Click += (sender, e) =>
-        {
-            try
-            {
-                var copiedText = saGrid.CopySelectedCells();
-                if (!string.IsNullOrEmpty(copiedText))
-                {
-                    Debug.WriteLine("Copied to clipboard:");
-                    Debug.WriteLine(copiedText);
-                    infoTextBlock.Text += " | Copied: ✅ Success";
-                }
-                else
-                {
-                    infoTextBlock.Text += " | Copied: ❌ No selection";
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Copy error: {ex.Message}");
-                infoTextBlock.Text += " | Copied: ❌ Error";
-            }
-        };
-
-        var clearSelectionBtn = new Button 
-        { 
-            Content = "🗑️ Clear Selection", 
-            Padding = new Thickness(10, 5)
-        };
-        clearSelectionBtn.Click += (sender, e) =>
-        {
-            saGrid.ClearCellSelection();
-            UpdateInfoText();
-        };
-
-        cellSelectionPanel.Children.Add(selectCellBtn);
-        cellSelectionPanel.Children.Add(selectRangeBtn);
-        cellSelectionPanel.Children.Add(copyCellsBtn);
-        cellSelectionPanel.Children.Add(clearSelectionBtn);
-        panel.Children.Add(cellSelectionPanel);
 
         return panel;
     }
@@ -342,12 +235,12 @@ public class MainWindow : Window
     {
         if (infoTextBlock != null && saGrid != null)
         {
-            var theme = saGrid.CurrentTheme ?? "default";
             var visibleRows = saGrid.RowModel.Rows.Count;
             var totalColumns = saGrid.AllLeafColumns.Count;
             var visibleColumns = saGrid.VisibleLeafColumns.Count;
             var hasGlobalFilter = saGrid.State.GlobalFilter != null;
             var hasColumnFilters = saGrid.State.ColumnFilters?.Filters.Count > 0;
+            var multiSort = saGrid.IsMultiSortEnabled() ? "ON" : "OFF";
             
             // Cell selection info
             var selectedCells = saGrid.GetSelectedCells();
@@ -362,7 +255,7 @@ public class MainWindow : Window
             }
             
             infoTextBlock.Text = $"📊 SaGrid Stats: {visibleRows} rows | {visibleColumns}/{totalColumns} columns | " +
-                               $"Theme: {theme} | Global Filter: {(hasGlobalFilter ? "✅" : "❌")} | " +
+                               $"Multi‑Sort: {multiSort} | Global Filter: {(hasGlobalFilter ? "✅" : "❌")} | " +
                                $"Column Filters: {(hasColumnFilters == true ? "✅" : "❌")} | " +
                                $"🎯 {cellSelectionInfo}";
         }

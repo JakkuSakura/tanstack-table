@@ -156,6 +156,18 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         return GetTotalColumnCount() - GetVisibleColumnCount();
     }
 
+    // Multi-sort helpers for the example
+    private bool? _multiSortOverride;
+    public bool IsMultiSortEnabled()
+    {
+        return _multiSortOverride ?? Options.EnableMultiSort;
+    }
+    public void ToggleMultiSortOverride()
+    {
+        _multiSortOverride = !IsMultiSortEnabled();
+        ScheduleUIUpdate();
+    }
+
     // Keyboard navigation support
     private int _currentRowIndex = 0;
     private int _currentColumnIndex = 0;
@@ -391,6 +403,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
                 _themeProperties["textColor"] = "#333333";
                 break;
         }
+        ScheduleUIUpdate();
     }
 
     public string? CurrentTheme => _currentTheme;

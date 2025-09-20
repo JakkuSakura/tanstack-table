@@ -23,6 +23,7 @@ public class SaGridComponent<TData> : Component
     private ContentControl? _footerHost;
     private Control? _headerControl;
     private TextBox? _lastFocusedTextBox;
+    private int _themeTick = 0;
 
     // Renderers
     private readonly SaGridHeaderRenderer<TData> _headerRenderer;
@@ -75,6 +76,16 @@ public class SaGridComponent<TData> : Component
             };
 
             _headerControl = _headerRenderer.CreateHeader(_saGrid, () => Grid, _selectionSignal?.Item1);
+            // React to theme changes by recreating header content
+            _saGrid.SetUIUpdateCallback(() =>
+            {
+                // Update reactive signals as before
+                var (gridGetter, gridSetter) = _gridSignal!.Value;
+                var (selectionGetter, selectionSetter) = _selectionSignal!.Value;
+                _themeTick++;
+                gridSetter?.Invoke(_saGrid);
+                selectionSetter?.Invoke(_themeTick);
+            });
             if (_headerControl is Control hdrCtrl)
             {
                 hdrCtrl.SetValue(Panel.ZIndexProperty, 1);
