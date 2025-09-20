@@ -24,7 +24,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void SetGlobalFilter(object? value)
     {
         GlobalFilterExtensions.SetGlobalFilter(this, value);
-        _onUIUpdate?.Invoke();
+        ScheduleUIUpdate();
     }
 
     public object? GetGlobalFilterValue()
@@ -40,7 +40,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         {
             base.SetPageIndex(0);
         }
-        _onUIUpdate?.Invoke();
+        ScheduleUIUpdate();
     }
 
     // Export functionality
@@ -400,7 +400,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         {
             base.SetPageIndex(0);
         }
-        _onUIUpdate?.Invoke();
+        ScheduleUIUpdate();
     }
 
     public void SetColumnFilter(string columnId, object? value)
@@ -432,7 +432,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         {
             base.SetPageIndex(0);
         }
-        _onUIUpdate?.Invoke();
+        ScheduleUIUpdate();
     }
 
     // Cell selection functionality
@@ -446,19 +446,31 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public new void SetPageIndex(int pageIndex)
     {
         base.SetPageIndex(pageIndex);
-        _onUIUpdate?.Invoke();
+        ScheduleUIUpdate();
     }
 
     public new void SetPageSize(int pageSize)
     {
         base.SetPageSize(pageSize);
-        _onUIUpdate?.Invoke();
+        ScheduleUIUpdate();
     }
 
     public new void NextPage()
     {
         base.NextPage();
-        _onUIUpdate?.Invoke();
+        ScheduleUIUpdate();
+    }
+
+    private void ScheduleUIUpdate()
+    {
+        try
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => _onUIUpdate?.Invoke());
+        }
+        catch
+        {
+            _onUIUpdate?.Invoke();
+        }
     }
 
     public new void PreviousPage()

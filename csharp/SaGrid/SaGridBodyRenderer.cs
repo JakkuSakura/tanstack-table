@@ -16,7 +16,8 @@ internal class SaGridBodyRenderer<TData>
 
     public Control CreateBody(SaGrid<TData> saGrid, Func<SaGrid<TData>>? gridSignalGetter = null, Func<int>? selectionSignalGetter = null)
     {
-        return new ScrollViewer()
+        var scroller = new ScrollViewer()
+            .Focusable(false)
             .Content(
                 new StackPanel()
                     .Orientation(Orientation.Vertical)
@@ -26,6 +27,7 @@ internal class SaGridBodyRenderer<TData>
                         ).ToArray()
                     )
             );
+        return scroller;
     }
 
     private Control CreateRow(SaGrid<TData> saGrid, Row<TData> row, Func<SaGrid<TData>>? gridSignalGetter = null, Func<int>? selectionSignalGetter = null)

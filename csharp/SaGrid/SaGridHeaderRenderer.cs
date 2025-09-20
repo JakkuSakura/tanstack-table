@@ -9,6 +9,12 @@ namespace SaGrid;
 
 internal class SaGridHeaderRenderer<TData>
 {
+    private readonly Action<TextBox>? _onFilterFocus;
+
+    public SaGridHeaderRenderer(Action<TextBox>? onFilterFocus = null)
+    {
+        _onFilterFocus = onFilterFocus;
+    }
     public Control CreateHeader(SaGrid<TData> saGrid)
     {
         var headerControls = new List<Control>();
@@ -112,6 +118,10 @@ internal class SaGridHeaderRenderer<TData>
         textBox.GotFocus += (sender, args) =>
         {
             Console.WriteLine($"TextBox for column {column.Id} got focus");
+            if (sender is TextBox tb)
+            {
+                _onFilterFocus?.Invoke(tb);
+            }
         };
 
         textBox.LostFocus += (sender, args) =>
@@ -122,8 +132,11 @@ internal class SaGridHeaderRenderer<TData>
         textBox.PointerPressed += (sender, args) =>
         {
             Console.WriteLine($"TextBox for column {column.Id} pointer pressed");
-            // Do not mark handled here; let TextBox process the event normally
-            // The grid container no longer steals focus on pointer presses.
+            // Explicitly capture focus on click to resist parent re-renders
+            if (sender is TextBox tb && !tb.IsFocused)
+            {
+                tb.Focus();
+            }
             args.Handled = false;
         };
 

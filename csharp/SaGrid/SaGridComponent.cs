@@ -17,6 +17,12 @@ public class SaGridComponent<TData> : Component
     private readonly SaGrid<TData> _saGrid;
     private (Func<SaGrid<TData>>, Action<SaGrid<TData>>)? _gridSignal;
     private (Func<int>, Action<int>)? _selectionSignal;
+    private Grid? _rootGrid;
+    private Border? _rootBorder;
+    private ContentControl? _bodyHost;
+    private ContentControl? _footerHost;
+    private Control? _headerControl;
+    private TextBox? _lastFocusedTextBox;
 
     // Renderers
     private readonly SaGridHeaderRenderer<TData> _headerRenderer;
@@ -30,7 +36,7 @@ public class SaGridComponent<TData> : Component
         _saGrid = saGrid;
         
         // Initialize renderers
-        _headerRenderer = new SaGridHeaderRenderer<TData>();
+        _headerRenderer = new SaGridHeaderRenderer<TData>(tb => _lastFocusedTextBox = tb);
         _bodyRenderer = new SaGridBodyRenderer<TData>();
         _footerRenderer = new SaGridFooterRenderer<TData>();
         
@@ -60,22 +66,16 @@ public class SaGridComponent<TData> : Component
             });
         }
 
-        return Reactive(() =>
+        // Build the root container once to avoid reparenting and keep header TextBoxes stable
+        if (_rootGrid == null)
         {
-            var currentGrid = Grid; // Access reactive grid signal
-            // Also depend on the selection/update signal so any grid state
-            // change (filters, pagination, etc.) re-renders the body/footer
-            var renderCounter = _selectionSignal?.Item1();
-
-            // Root container (stable layout) with header/body/footer
-            var grid = new Grid
+            _rootGrid = new Grid
             {
                 RowDefinitions = new RowDefinitions("Auto,*,Auto")
             };
 
-            // Recreate header reactively to avoid reparenting exceptions
-            var header = _headerRenderer.CreateHeader(currentGrid);
-            if (header is Control hdrCtrl)
+            _headerControl = _headerRenderer.CreateHeader(_saGrid);
+            if (_headerControl is Control hdrCtrl)
             {
                 hdrCtrl.SetValue(Panel.ZIndexProperty, 1);
                 if (hdrCtrl is Panel hdrPanel)
@@ -83,26 +83,49 @@ public class SaGridComponent<TData> : Component
                     hdrPanel.Background = Brushes.White;
                 }
             }
-            Avalonia.Controls.Grid.SetRow(header, 0);
-            var body = _bodyRenderer.CreateBody(currentGrid, () => Grid, _selectionSignal?.Item1);
-            Avalonia.Controls.Grid.SetRow(body, 1);
-            var footer = _footerRenderer.CreateFooter(currentGrid);
-            Avalonia.Controls.Grid.SetRow(footer, 2);
+            Avalonia.Controls.Grid.SetRow(_headerControl, 0);
+            _rootGrid.Children.Add(_headerControl);
 
-            grid.Children.Add(header);
-            grid.Children.Add(body);
-            grid.Children.Add(footer);
+            _bodyHost = new ContentControl();
+            Avalonia.Controls.Grid.SetRow(_bodyHost, 1);
+            _rootGrid.Children.Add(_bodyHost);
 
-            var mainBorder = new Border()
+            _footerHost = new ContentControl();
+            Avalonia.Controls.Grid.SetRow(_footerHost, 2);
+            _rootGrid.Children.Add(_footerHost);
+
+            _rootBorder = new Border()
                 .BorderThickness(1)
                 .BorderBrush(Brushes.Gray)
-                .Child(grid);
+                .Child(_rootGrid);
+        }
+
+        return Reactive(() =>
+        {
+            var currentGrid = Grid; // Access reactive grid signal
+            // Also depend on the selection/update signal so any grid state
+            // change (filters, pagination, etc.) re-renders the body/footer
+            var renderCounter = _selectionSignal?.Item1();
+
+            // Update body and footer content in-place to keep header focus stable
+            var body = _bodyRenderer.CreateBody(currentGrid, () => Grid, _selectionSignal?.Item1);
+            if (_bodyHost != null) _bodyHost.Content = body;
+
+            var footer = _footerRenderer.CreateFooter(currentGrid);
+            if (_footerHost != null) _footerHost.Content = footer;
+
+            // Restore focus if a TextBox in header had focus
+            if (_lastFocusedTextBox != null && _lastFocusedTextBox.IsVisible)
+            {
+                // Re-focus the same control instance; header is stable so this works
+                _lastFocusedTextBox.Focus();
+            }
 
             // Note: Keyboard navigation remains disabled here to prioritize typing in filter inputs
 
             // Do not force focus on pointer press; let child controls manage focus naturally
 
-            return mainBorder;
+            return _rootBorder!;
         });
     }
 }
