@@ -30,7 +30,7 @@ internal class TableCellRenderer<TData>
             );
     }
 
-    public Control CreateReactiveCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column, Func<Table<TData>> tableSignalGetter, Func<int>? selectionSignalGetter = null)
+    public Control CreateReactiveCell(Table<TData> table, Row<TData> row, Column<TData> column, Func<Table<TData>> tableSignalGetter, Func<int>? selectionSignalGetter = null)
     {
         Console.WriteLine($"Creating reactive cell for row {row.Index}, column {column.Id}");
         
@@ -40,9 +40,9 @@ internal class TableCellRenderer<TData>
             var currentTable = tableSignalGetter(); // Get current table from reactive signal
             var selectionCounter = selectionSignalGetter?.Invoke() ?? 0; // This ensures reactivity when selection changes
             
-            var currentSaGrid = currentTable as SaGrid<TData>;
-            var isSelected = currentSaGrid?.IsCellSelected(row.Index, column.Id) ?? false;
-            var activeCell = currentSaGrid?.GetActiveCell();
+            var cellSelectable = currentTable as ICellSelectable<TData>;
+            var isSelected = cellSelectable?.IsCellSelected(row.Index, column.Id) ?? false;
+            var activeCell = cellSelectable?.GetActiveCell();
             var isActiveCell = activeCell?.RowIndex == row.Index && activeCell?.ColumnId == column.Id;
             
             var background = GetCellBackground(isSelected, isActiveCell, row.Index);
@@ -70,7 +70,7 @@ internal class TableCellRenderer<TData>
                 var isCtrlPressed = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
                 Console.WriteLine($"Cell clicked: Row {row.Index}, Column {column.Id}, Ctrl: {isCtrlPressed}");
                 
-                currentSaGrid?.SelectCell(row.Index, column.Id, isCtrlPressed);
+                cellSelectable?.SelectCell(row.Index, column.Id, isCtrlPressed);
                 e.Handled = true; // Prevent event from bubbling up
             };
 

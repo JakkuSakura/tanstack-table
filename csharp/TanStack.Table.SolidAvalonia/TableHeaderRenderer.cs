@@ -125,17 +125,24 @@ internal class TableHeaderRenderer<TData>
 
         textBox.TextChanged += (sender, args) =>
         {
-            if (table is SaGrid<TData> saGrid && sender is TextBox tb)
+            if (table is IAdvancedTable<TData> advancedTable && sender is TextBox tb)
             {
                 var filterValue = string.IsNullOrWhiteSpace(tb.Text) ? (object?)null : tb.Text;
                 Console.WriteLine($"Filter changed for column {column.Id}: '{tb.Text}' -> {(filterValue == null ? "null" : filterValue)}");
                 if (filterValue != null)
                 {
-                    saGrid.SetColumnFilter(column.Id, filterValue);
+                    // Use base table SetColumnFilter method if available, or try reflection
+                    if (table is Table<TData> baseTable)
+                    {
+                        baseTable.SetColumnFilter(column.Id, filterValue);
+                    }
                 }
                 else
                 {
-                    saGrid.SetColumnFilter(column.Id, ""); // Use empty string instead of null
+                    if (table is Table<TData> baseTable)
+                    {
+                        baseTable.SetColumnFilter(column.Id, ""); // Use empty string instead of null
+                    }
                 }
             }
         };

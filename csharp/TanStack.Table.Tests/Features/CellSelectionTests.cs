@@ -25,8 +25,8 @@ public class CellSelectionTests : PersonContractTestBase
 
         selectedCells.Should().HaveCount(1, "Should have exactly one selected cell");
         activeCell.Should().NotBeNull("Should have an active cell");
-        activeCell!.RowIndex.Should().Be(0, "Active cell should be at row 0");
-        activeCell.ColumnId.Should().Be("firstName", "Active cell should be in firstName column");
+        activeCell!.Value.RowIndex.Should().Be(0, "Active cell should be at row 0");
+        activeCell.Value.ColumnId.Should().Be("firstName", "Active cell should be in firstName column");
         saGrid.IsCellSelected(0, "firstName").Should().BeTrue("The selected cell should be marked as selected");
     }
 
@@ -97,27 +97,27 @@ public class CellSelectionTests : PersonContractTestBase
         saGrid.SelectCell(1, "firstName"); // Start at row 1, firstName column
 
         // Act & Assert - Navigate right
-        saGrid.NavigateCell(SaGrid<TestPerson>.CellNavigationDirection.Right);
+        saGrid.NavigateCell(CellNavigationDirection.Right);
         var activeCell = saGrid.GetActiveCell();
         activeCell.Should().NotBeNull("Should have active cell after navigation");
-        activeCell!.RowIndex.Should().Be(1, "Should stay in same row");
-        activeCell.ColumnId.Should().Be("lastName", "Should move to next column");
+        activeCell!.Value.RowIndex.Should().Be(1, "Should stay in same row");
+        activeCell.Value.ColumnId.Should().Be("lastName", "Should move to next column");
 
         // Act & Assert - Navigate down
-        saGrid.NavigateCell(SaGrid<TestPerson>.CellNavigationDirection.Down);
+        saGrid.NavigateCell(CellNavigationDirection.Down);
         activeCell = saGrid.GetActiveCell();
-        activeCell!.RowIndex.Should().Be(2, "Should move to next row");
-        activeCell.ColumnId.Should().Be("lastName", "Should stay in same column");
+        activeCell!.Value.RowIndex.Should().Be(2, "Should move to next row");
+        activeCell.Value.ColumnId.Should().Be("lastName", "Should stay in same column");
 
         // Act & Assert - Navigate up
-        saGrid.NavigateCell(SaGrid<TestPerson>.CellNavigationDirection.Up);
+        saGrid.NavigateCell(CellNavigationDirection.Up);
         activeCell = saGrid.GetActiveCell();
-        activeCell!.RowIndex.Should().Be(1, "Should move back to previous row");
+        activeCell!.Value.RowIndex.Should().Be(1, "Should move back to previous row");
 
         // Act & Assert - Navigate left
-        saGrid.NavigateCell(SaGrid<TestPerson>.CellNavigationDirection.Left);
+        saGrid.NavigateCell(CellNavigationDirection.Left);
         activeCell = saGrid.GetActiveCell();
-        activeCell!.ColumnId.Should().Be("firstName", "Should move back to previous column");
+        activeCell!.Value.ColumnId.Should().Be("firstName", "Should move back to previous column");
     }
 
     [Fact]

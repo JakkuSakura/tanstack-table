@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 
 namespace TanStack.Table.Core;
@@ -214,6 +215,7 @@ public record ContextMenuItem
     public bool IsSeparator { get; init; } = false;
 
     // Constructor for test compatibility
+    [SetsRequiredMembers]
     public ContextMenuItem(string id, string label)
     {
         Id = id;

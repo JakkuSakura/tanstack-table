@@ -281,7 +281,7 @@ public class MainWindow : Window
             
             if (activeCell != null)
             {
-                cellSelectionInfo += $" | Active: ({activeCell.RowIndex},{activeCell.ColumnId})";
+                cellSelectionInfo += $" | Active: ({activeCell.Value.RowIndex},{activeCell.Value.ColumnId})";
             }
             
             infoTextBlock.Text = $"📊 SaGrid Stats: {visibleRows} rows | {visibleColumns}/{totalColumns} columns | " +

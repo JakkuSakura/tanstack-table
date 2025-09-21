@@ -161,18 +161,32 @@ public interface ITableFeature<TData>
     void OnStateChange(ITable<TData> table, TableState<TData> state);
 }
 
-public interface ISaGrid<TData> : ITable<TData>
+public interface ICellSelectable<TData>
+{
+    // Cell selection capabilities
+    bool IsCellSelected(int rowIndex, string columnId);
+    void SelectCell(int rowIndex, string columnId, bool multiSelect = false);
+    void ClearCellSelection();
+    (int RowIndex, string ColumnId)? GetActiveCell();
+    bool NavigateCell(CellNavigationDirection direction);
+    int GetSelectedCellCount();
+    string CopySelectedCells();
+}
+
+public enum CellNavigationDirection
+{
+    Up,
+    Down,
+    Left,
+    Right
+}
+
+public interface IAdvancedTable<TData> : ITable<TData>
 {
     // Advanced filtering capabilities
     void SetGlobalFilter(object? value);
     object? GetGlobalFilterValue();
     void ClearGlobalFilter();
-    
-    // Export functionality
-    Task<string> ExportToCsvAsync();
-    Task<string> ExportToJsonAsync();
-    string ExportToCsv();
-    string ExportToJson();
     
     // Advanced search and filtering
     void SetQuickFilter(string? searchTerm);
@@ -189,4 +203,13 @@ public interface ISaGrid<TData> : ITable<TData>
     void HandleKeyDown(string key);
     Cell<TData>? GetCurrentCell();
     Row<TData>? GetCurrentRow();
+}
+
+public interface ISaGrid<TData> : IAdvancedTable<TData>, ICellSelectable<TData>
+{
+    // Export functionality
+    Task<string> ExportToCsvAsync();
+    Task<string> ExportToJsonAsync();
+    string ExportToCsv();
+    string ExportToJson();
 }

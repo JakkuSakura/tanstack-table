@@ -86,7 +86,7 @@ public class SaGridIntegrationTests : PersonContractTestBase
         var saGrid = new SaGrid<TestPerson>(table);
         
         // Act - Set custom header renderer
-        saGrid.SetHeaderRenderer("age", (column) => $"Custom: {column.Id}");
+        saGrid.SetHeaderRenderer("age", columnId => $"Custom: {columnId}");
         
         // Assert
         var headerContent = saGrid.RenderHeader("age");
@@ -108,8 +108,8 @@ public class SaGridIntegrationTests : PersonContractTestBase
         // Assert
         var actions = saGrid.GetRowActions(firstRow);
         actions.Should().HaveCount(2, "Should have two row actions");
-        actions.Should().ContainKey("edit");
-        actions.Should().ContainKey("delete");
+        actions.Should().Contain(action => action.Id == "edit");
+        actions.Should().Contain(action => action.Id == "delete");
     }
 
     [Fact]
@@ -122,8 +122,14 @@ public class SaGridIntegrationTests : PersonContractTestBase
         // Act - Configure context menu
         saGrid.SetContextMenuItems(new[]
         {
-            new ContextMenuItem("copy", "Copy"),
+            new ContextMenuItem("copy", "Copy")
+            {
+                Action = _ => { }
+            },
             new ContextMenuItem("export", "Export")
+            {
+                Action = _ => { }
+            }
         });
         
         // Assert

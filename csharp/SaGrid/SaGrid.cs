@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using TanStack.Table.Core;
+using TanStack.Table.SolidAvalonia;
 
 namespace SaGrid;
 
@@ -602,14 +603,20 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         return cellSelection?.IsCellSelected(rowIndex, columnId) == true;
     }
 
-    public CellPosition? GetActiveCell()
+    public (int RowIndex, string ColumnId)? GetActiveCell()
     {
-        return State.CellSelection?.ActiveCell;
+        var activeCell = State.CellSelection?.ActiveCell;
+        return activeCell != null ? (activeCell.RowIndex, activeCell.ColumnId) : null;
     }
 
     public IReadOnlyCollection<CellPosition> GetSelectedCells()
     {
         return State.CellSelection?.SelectedCells ?? new HashSet<CellPosition>();
+    }
+
+    public int GetSelectedCellCount()
+    {
+        return State.CellSelection?.SelectedCells.Count ?? 0;
     }
 
     // Copy selected cells to clipboard (as text)
@@ -653,45 +660,40 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     }
 
     // Keyboard navigation for cell selection
-    public void NavigateCell(CellNavigationDirection direction)
+    public bool NavigateCell(CellNavigationDirection direction)
     {
         var activeCell = GetActiveCell();
-        if (activeCell == null) return;
+        if (activeCell == null) return false;
 
         var visibleColumns = VisibleLeafColumns.ToList();
-        var currentColIndex = visibleColumns.FindIndex(c => c.Id == activeCell.ColumnId);
-        var currentRowIndex = activeCell.RowIndex;
+        var currentColIndex = visibleColumns.FindIndex(c => c.Id == activeCell.Value.ColumnId);
+        var currentRowIndex = activeCell.Value.RowIndex;
 
-        CellPosition? newActiveCell = direction switch
+        (int RowIndex, string ColumnId)? newActiveCell = direction switch
         {
             CellNavigationDirection.Up when currentRowIndex > 0 => 
-                new CellPosition(currentRowIndex - 1, activeCell.ColumnId),
+                (currentRowIndex - 1, activeCell.Value.ColumnId),
             
             CellNavigationDirection.Down when currentRowIndex < RowModel.Rows.Count - 1 => 
-                new CellPosition(currentRowIndex + 1, activeCell.ColumnId),
+                (currentRowIndex + 1, activeCell.Value.ColumnId),
             
             CellNavigationDirection.Left when currentColIndex > 0 => 
-                new CellPosition(currentRowIndex, visibleColumns[currentColIndex - 1].Id),
+                (currentRowIndex, visibleColumns[currentColIndex - 1].Id),
             
             CellNavigationDirection.Right when currentColIndex < visibleColumns.Count - 1 => 
-                new CellPosition(currentRowIndex, visibleColumns[currentColIndex + 1].Id),
+                (currentRowIndex, visibleColumns[currentColIndex + 1].Id),
             
             _ => null
         };
 
         if (newActiveCell != null)
         {
-            SelectCell(newActiveCell.RowIndex, newActiveCell.ColumnId);
+            SelectCell(newActiveCell.Value.RowIndex, newActiveCell.Value.ColumnId);
+            return true;
         }
+        return false;
     }
 
-    public enum CellNavigationDirection
-    {
-        Up,
-        Down,
-        Left,
-        Right
-    }
 
 }
 

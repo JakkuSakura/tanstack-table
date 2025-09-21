@@ -22,12 +22,14 @@
   <ItemGroup>
     <ProjectReference Include="../TanStack.Table.Core/TanStack.Table.Core.csproj" />
     <ProjectReference Include="../TanStack.Table.SolidAvalonia/TanStack.Table.SolidAvalonia.csproj" />
+    <ProjectReference Include="../SaGrid/SaGrid.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="FluentAssertions" />
     <Using Include="TanStack.Table.Core" />
+    <Using Include="SaGrid" />
   </ItemGroup>
 
 </Project>

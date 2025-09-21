@@ -66,19 +66,23 @@ public class SolidTable<TData> : Component
                 }
             };
 
-            // For external tables (like SaGrid), we need to handle state changes differently
-            if (_externalTable != null && _externalTable is SaGrid<TData> saGrid)
+            // For external tables with UI update capability, we need to handle state changes differently
+            if (_externalTable != null && _externalTable is IAdvancedTable<TData> advancedTable)
             {
                 var (selectionGetter, selectionSetter) = _selectionSignal.Value;
                 var updateCounter = 0;
 
-                // Set up UI update callback for SaGrid
-                saGrid.SetUIUpdateCallback(() =>
+                // Try to set up UI update callback if the table supports it
+                if (advancedTable.GetType().GetMethod("SetUIUpdateCallback") != null)
                 {
-                    updateCounter++;
-                    signalSetter?.Invoke(saGrid);
-                    selectionSetter?.Invoke(updateCounter); // Use counter instead of selectedCount to force change
-                });
+                    var method = advancedTable.GetType().GetMethod("SetUIUpdateCallback");
+                    method?.Invoke(advancedTable, new object[] { new Action(() =>
+                    {
+                        updateCounter++;
+                        signalSetter?.Invoke(advancedTable as Table<TData>);
+                        selectionSetter?.Invoke(updateCounter);
+                    })});
+                }
             }
             else
             {
@@ -111,7 +115,7 @@ public class SolidTable<TData> : Component
                 );
 
             // Add keyboard navigation for cell selection
-            if (currentTable is SaGrid<TData> saGrid)
+            if (currentTable is ICellSelectable<TData> cellSelectable)
             {
                 mainBorder.KeyDown += (sender, e) =>
                 {
@@ -119,24 +123,24 @@ public class SolidTable<TData> : Component
                     {
                         var direction = e.Key switch
                         {
-                            Avalonia.Input.Key.Up => SaGrid<TData>.CellNavigationDirection.Up,
-                            Avalonia.Input.Key.Down => SaGrid<TData>.CellNavigationDirection.Down,
-                            Avalonia.Input.Key.Left => SaGrid<TData>.CellNavigationDirection.Left,
-                            Avalonia.Input.Key.Right => SaGrid<TData>.CellNavigationDirection.Right,
-                            _ => (SaGrid<TData>.CellNavigationDirection?)null
+                            Avalonia.Input.Key.Up => CellNavigationDirection.Up,
+                            Avalonia.Input.Key.Down => CellNavigationDirection.Down,
+                            Avalonia.Input.Key.Left => CellNavigationDirection.Left,
+                            Avalonia.Input.Key.Right => CellNavigationDirection.Right,
+                            _ => (CellNavigationDirection?)null
                         };
 
                         if (direction.HasValue)
                         {
                             Console.WriteLine($"Keyboard navigation: {direction.Value}");
-                            saGrid.NavigateCell(direction.Value);
+                            cellSelectable.NavigateCell(direction.Value);
                             // UI update callback will be triggered automatically
                             e.Handled = true;
                         }
                         else if (e.Key == Avalonia.Input.Key.C && e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control))
                         {
                             // Ctrl+C to copy selected cells
-                            var copiedText = saGrid.CopySelectedCells();
+                            var copiedText = cellSelectable.CopySelectedCells();
                             if (!string.IsNullOrEmpty(copiedText))
                             {
                                 Console.WriteLine($"Copied to clipboard:\n{copiedText}");
@@ -147,7 +151,7 @@ public class SolidTable<TData> : Component
                         else if (e.Key == Avalonia.Input.Key.Escape)
                         {
                             // Escape to clear selection
-                            saGrid.ClearCellSelection();
+                            cellSelectable.ClearCellSelection();
                             // UI update callback will be triggered automatically
                             e.Handled = true;
                         }

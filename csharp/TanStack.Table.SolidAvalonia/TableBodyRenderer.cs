@@ -36,10 +36,10 @@ internal class TableBodyRenderer<TData>
         {
             Console.WriteLine($"DEBUG cell row={row.Index} col={column.Id} value={TableContentHelper<TData>.GetCellContent(row, column)}");
             
-            // Use reactive cells for SaGrid to support cell selection
-            if (table is SaGrid<TData> saGrid && tableSignalGetter != null)
+            // Use reactive cells for cell-selectable tables to support cell selection
+            if (table is ICellSelectable<TData> && tableSignalGetter != null)
             {
-                return _cellRenderer.CreateReactiveCell(saGrid, row, column, tableSignalGetter, selectionSignalGetter);
+                return _cellRenderer.CreateReactiveCell(table, row, column, tableSignalGetter, selectionSignalGetter);
             }
             else
             {
